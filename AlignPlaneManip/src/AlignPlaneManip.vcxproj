@@ -188,8 +188,7 @@
       <TargetMachine>MachineX64</TargetMachine>
     </Link>
     <PostBuildEvent>
-      <Command>
-      </Command>
+      <Command>copy F:\usr\Mirage\src\cpp\MayaAPI\AlignPlaneManip\x64\Debug2014\*.mll F:\usr\Mirage\Maya\2014-x64\plug-ins\</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release2014|Win32'">
@@ -355,11 +354,18 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="AlignPlaneCmd.cpp" />
     <ClCompile Include="AlignPlaneManip.cpp" />
+    <ClCompile Include="AlignPlaneNode.cpp" />
+    <ClCompile Include="AlignPlaneNodeManip.cpp" />
+    <ClCompile Include="AlignPlane_Main.cpp" />
     <ClCompile Include="maya_utility.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="AlignPlaneCmd.hpp" />
     <ClInclude Include="AlignPlaneManip.hpp" />
+    <ClInclude Include="AlignPlaneNode.hpp" />
+    <ClInclude Include="AlignPlaneNodeManip.hpp" />
     <ClInclude Include="maya_utility.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

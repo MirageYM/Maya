@@ -1,5 +1,27 @@
-#include <maya/MFnPlugin.h>
+/*
+  AlignPlaneManip
+  Copyright (C) 2015 Yasutoshi Mori (Mirage)
+  $Id:  $
+*/
+
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+/*
+
+  THIS IS AlignPlaneManip PROTOTYPE SOURCE CODE.
+  THIS CODE IS OBSOLETED FROM AlignPlaneManip PROJECT.
+
+*/
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+
+
+//Maya
 #include <maya/MFnNumericAttribute.h>
+
+//project
 #include "maya_utility.hpp"
 #include "AlignPlaneManip.hpp"
 
@@ -76,12 +98,6 @@ MStatus AlignPlaneManip::connectToDependNode( const MObject &node ){
 	invTrsMatrix_ = transform.transformation().asMatrixInverse();
 	trsMatrix_ = meshDagPath_.inclusiveMatrix();
 	invTrsMatrix_ = meshDagPath_.inclusiveMatrixInverse();
-
-	DebugPrintf( "%f %f %f %f\n %f %f %f %f\n %f %f %f %f\n %f %f %f %f\n",
-				  trsMatrix_[0][0], trsMatrix_[0][1], trsMatrix_[0][2], trsMatrix_[0][3], 
-				  trsMatrix_[1][0], trsMatrix_[1][1], trsMatrix_[1][2], trsMatrix_[1][3], 
-				  trsMatrix_[2][0], trsMatrix_[2][1], trsMatrix_[2][2], trsMatrix_[2][3], 
-				  trsMatrix_[3][0], trsMatrix_[3][1], trsMatrix_[3][2], trsMatrix_[3][3] );
 	
 	unsigned int cnt = 0;
 	MItMeshVertex iter( meshDagPath_, component_ );
@@ -113,7 +129,7 @@ MStatus AlignPlaneManip::connectToDependNode( const MObject &node ){
 			return MS::kFailure;
 		}
 			
-		initialPoints_[ cnt ] = plug2MVector( vtxPlug );
+		initialPoints_[ cnt ] = plug2MVector<MVector>( vtxPlug );
 		unsigned int plugIndex = addManipToPlugConversion( vtxPlug );
 		
 		if( plugIndex != static_cast< unsigned int >( cnt ) ){
@@ -285,19 +301,23 @@ MManipData AlignPlaneManip::manipToPlugConversion( unsigned index ){
 
 
 //--------------------------------------------------------
-//! AlighPlaneContextObject
+//! AlignPlaneContextObject
 //--------------------------------------------------------
 //- - - - - - - - - - - - - - - - - -
 //
-AlighPlaneContextObject::AlighPlaneContextObject( void ){
+AlignPlaneContextObject::AlignPlaneContextObject(){
 	MString str( "" );
 	setTitleString( str );
 }
 
+//- - - - - - - - - - - - - - - - - -
+//
+AlignPlaneContextObject::~AlignPlaneContextObject(){
+}
 
 //- - - - - - - - - - - - - - - - - -
 //
-void AlighPlaneContextObject::toolOnSetup( MEvent& ){
+void AlignPlaneContextObject::toolOnSetup( MEvent& ){
 	MString str( "" );
 	setHelpString(str);
 
@@ -314,7 +334,7 @@ void AlighPlaneContextObject::toolOnSetup( MEvent& ){
 
 //- - - - - - - - - - - - - - - - - -
 //
-void AlighPlaneContextObject::toolOffCleanup( void ){
+void AlignPlaneContextObject::toolOffCleanup( void ){
 	MStatus status;
 	status = MModelMessage::removeCallback(id1);
 	if (!status) {
@@ -326,10 +346,10 @@ void AlighPlaneContextObject::toolOffCleanup( void ){
 
 //- - - - - - - - - - - - - - - - - -
 //
-void AlighPlaneContextObject::updateManipulators( void* data ){
+void AlignPlaneContextObject::updateManipulators( void* data ){
 	MStatus stat = MStatus::kSuccess;
 	
-	AlighPlaneContextObject * ctxPtr = reinterpret_cast< AlighPlaneContextObject* >( data );
+	AlignPlaneContextObject * ctxPtr = reinterpret_cast< AlignPlaneContextObject* >( data );
 	ctxPtr->deleteManipulators(); 
 
 	MSelectionList list;
@@ -371,71 +391,19 @@ void AlighPlaneContextObject::updateManipulators( void* data ){
 
 
 //--------------------------------------------------------
-//! AlighPlaneContext
+//! AlignPlaneContext
 //--------------------------------------------------------
 //- - - - - - - - - - - - - - - - - -
 //
-MPxContext *AlighPlaneContext::makeObj( void ){
-	return new AlighPlaneContextObject();
+MPxContext *AlignPlaneContext::makeObj( void ){
+	return new AlignPlaneContextObject();
 }
 
 //- - - - - - - - - - - - - - - - - -
 //
-void *AlighPlaneContext::creator( void ){
-	return new AlighPlaneContext;
+void *AlignPlaneContext::creator( void ){
+	return new AlignPlaneContext;
 }
 
 
-
-//--------------------------------------------------------
-//! initializePlugin
-//--------------------------------------------------------
-MStatus initializePlugin(MObject obj)
-{
-	MStatus status;
-	MFnPlugin plugin(obj, PLUGIN_COMPANY, "6.0", "Any");
-
-	status = plugin.registerContextCommand(	"AlighPlaneContext",
-											&AlighPlaneContext::creator );
-	if( !status ){
-		MGlobal::displayError( "Error registering AlighPlaneContext command" );
-		return status;
-	}
-
-	status = plugin.registerNode(	"AlignPlaneManip",
-									AlignPlaneManip::id, 
-									&AlignPlaneManip::creator,
-									&AlignPlaneManip::initialize,
-									MPxNode::kManipContainer );
-	if( !status ){
-		MGlobal::displayError( "Error registering AlignPlaneManip node" );
-		return status;
-	}
-
-	return status;
-}
-
-
-//--------------------------------------------------------
-//! uninitializePlugin
-//--------------------------------------------------------
-MStatus uninitializePlugin(MObject obj)
-{
-	MStatus status;
-	MFnPlugin plugin(obj);
-
-	status = plugin.deregisterContextCommand( "AlighPlaneContext" );
-	if( !status ){
-		MGlobal::displayError( "Error deregistering AlighPlaneContext command" );
-		return status;
-	}
-
-	status = plugin.deregisterNode(AlignPlaneManip::id);
-	if( !status ){
-		MGlobal::displayError( "Error deregistering AlignPlaneManip node" );
-		return status;
-	}
-
-	return status;
-}
 
