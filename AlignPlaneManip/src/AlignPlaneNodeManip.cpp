@@ -12,8 +12,10 @@
 //OpenGL
 #pragma comment( lib, "opengl32" )
 #pragma comment( lib, "glu32" )
+#if !defined( SDK_HAS_MGL_ )
 #include <gl/gl.h>
 #include <gl/glu.h>
+#endif
 
 //project
 #include "maya_utility.hpp"
