@@ -1,0 +1,153 @@
+proc init(){
+	if( !`optionVar -exists MirageBCG_WindowR` ){
+		optionVar -fv MirageBCG_WindowR 0.5;
+	}
+	if( !`optionVar -exists MirageBCG_WindowG` ){
+		optionVar -fv MirageBCG_WindowG 0.5;
+	}
+	if( !`optionVar -exists MirageBCG_WindowB` ){
+		optionVar -fv MirageBCG_WindowB 0.5;
+	}
+	if( !`optionVar -exists MirageBCG_CtlR` ){
+		optionVar -fv MirageBCG_CtlR 0.5;
+	}
+	if( !`optionVar -exists MirageBCG_CtlG` ){
+		optionVar -fv MirageBCG_CtlG 0.5;
+	}
+	if( !`optionVar -exists MirageBCG_CtlB` ){
+		optionVar -fv MirageBCG_CtlB 0.5;
+	}
+	if( !`optionVar -exists MirageBCG_CtlLR` ){
+		optionVar -fv MirageBCG_CtlLR 0.5;
+	}
+	if( !`optionVar -exists MirageBCG_CtlLG` ){
+		optionVar -fv MirageBCG_CtlLG 0.5;
+	}
+	if( !`optionVar -exists MirageBCG_CtlLB` ){
+		optionVar -fv MirageBCG_CtlLB 0.5;
+	}
+}
+
+global proc MirageBGChange.SetColors(){
+
+	init();
+	
+	{
+		float $r = `optionVar -query MirageBCG_WindowR`;
+		float $g = `optionVar -query MirageBCG_WindowG`;
+		float $b = `optionVar -query MirageBCG_WindowB`;
+
+		string $v[] = `lsUI -windows`;
+		string $l;
+		for( $l in $v ){
+			window -e -bgc $r $g $b $l;
+		}
+	}
+
+	{
+		float $r = `optionVar -query MirageBCG_CtlR`;
+		float $g = `optionVar -query MirageBCG_CtlG`;
+		float $b = `optionVar -query MirageBCG_CtlB`;
+
+		string $v[] = `lsUI -ctl`;
+		string $l;
+		for( $l in $v ){
+			control -e -bgc $r $g $b $l;
+		}
+	}
+	
+	{
+		float $r = `optionVar -query MirageBCG_CtlLR`;
+		float $g = `optionVar -query MirageBCG_CtlLG`;
+		float $b = `optionVar -query MirageBCG_CtlLB`;
+
+		string $v[] = `lsUI -cl`;
+		string $l;
+		for( $l in $v ){
+			control -e -bgc $r $g $b $l;
+		}
+	}
+}
+
+global proc MirageBGChange.OnWindowColorChanged(){
+
+	float $rgb[] = `colorSliderGrp -q -rgb MirageBGChange_WindowColorVal`;
+	optionVar -fv MirageBCG_WindowR $rgb[0];
+	optionVar -fv MirageBCG_WindowG $rgb[1];
+	optionVar -fv MirageBCG_WindowB $rgb[2];
+
+	MirageBGChange.SetColors();
+
+}
+
+global proc MirageBGChange.OnControlColorChanged(){
+	
+	float $rgb[] = `colorSliderGrp -q -rgb MirageBGChange_ControlColVal`;
+	optionVar -fv MirageBCG_CtlR $rgb[0];
+	optionVar -fv MirageBCG_CtlG $rgb[1];
+	optionVar -fv MirageBCG_CtlB $rgb[2];
+
+	MirageBGChange.SetColors();
+}
+
+global proc MirageBGChange.OnControlLayoutColorChanged(){
+	
+	float $rgb[] = `colorSliderGrp -q -rgb MirageBGChange_ControlLayoutColVal`;
+	optionVar -fv MirageBCG_CtlLR $rgb[0];
+	optionVar -fv MirageBCG_CtlLG $rgb[1];
+	optionVar -fv MirageBCG_CtlLB $rgb[2];
+
+	MirageBGChange.SetColors();
+}
+
+
+global proc MirageBGChange( int $showUI ){
+
+	init();
+
+	if( $showUI ){
+
+		if ( eval("window -exists MirageBGChange_MainWindow" ) == true ){
+			return;
+		}
+
+		string $hwnd = `window	-title "UI BG Change"
+			-sizeable true
+				-menuBar true
+					MirageBGChange_MainWindow`;
+
+		columnLayout;
+		{
+			float $r = `optionVar -query MirageBCG_WindowR`;
+			float $g = `optionVar -query MirageBCG_WindowG`;
+			float $b = `optionVar -query MirageBCG_WindowB`;
+			colorSliderGrp -l "Window" -rgb $r $g $b -cc "MirageBGChange.OnWindowColorChanged" MirageBGChange_WindowColorVal;
+		}
+		{
+			float $r = `optionVar -query MirageBCG_CtlR`;
+			float $g = `optionVar -query MirageBCG_CtlG`;
+			float $b = `optionVar -query MirageBCG_CtlB`;
+			colorSliderGrp -l "Control" -rgb $r $g $b -cc "MirageBGChange.OnControlColorChanged" MirageBGChange_ControlColVal;
+		}
+		{
+			float $r = `optionVar -query MirageBCG_CtlLR`;
+			float $g = `optionVar -query MirageBCG_CtlLG`;
+			float $b = `optionVar -query MirageBCG_CtlLB`;
+
+			colorSliderGrp -l "CtlLayout" -rgb $r $g $b -cc "MirageBGChange.OnControlLayoutColorChanged" MirageBGChange_ControlLayoutColVal;
+		}
+		
+		button -l "apply" -c "MirageBGChange.OnWindowColorChanged";
+		
+		setParent..;
+
+		window -e -w 100 -h 100 $hwnd;
+
+
+
+		showWindow $hwnd;
+	}else{
+		MirageBGChange.SetColors();
+	}
+}
+
