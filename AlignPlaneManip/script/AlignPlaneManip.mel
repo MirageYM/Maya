@@ -1,4 +1,0 @@
-global proc AlignPlaneManip(){
-    string $ctx = `AlighPlaneContext`;
-    setToolTo $ctx;
-}
