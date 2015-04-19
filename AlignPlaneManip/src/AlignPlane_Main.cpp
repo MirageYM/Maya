@@ -6,7 +6,6 @@
 
 #include <maya/MFnPlugin.h>
 
-#include "AlignPlaneManip.hpp"
 #include "AlignPlaneNode.hpp"
 #include "AlignPlaneNodeManip.hpp"
 #include "AlignPlaneCmd.hpp"
@@ -21,25 +20,6 @@ __declspec(dllexport) MStatus initializePlugin(MObject obj)
 {
 	MStatus status;
 	MFnPlugin plugin( obj, PLUGIN_VENDOR, "6.0", "Any" );
-
-	status = plugin.registerContextCommand(	"AlignPlaneContext",
-											&AlignPlaneContext::creator );
-	if( !status ){
-		MGlobal::displayError( "Error registering AlignPlaneContext command" );
-		return status;
-	}
-
-	/*
-	status = plugin.registerNode(	"AlignPlaneManip",
-									AlignPlaneManip::getId(), 
-									&AlignPlaneManip::creator,
-									&AlignPlaneManip::initialize,
-									MPxNode::kManipContainer );
-	if( !status ){
-		MGlobal::displayError( "Error registering AlignPlaneManip node" );
-		return status;
-	}
-	*/
 
 	status = plugin.registerNode(	"AlignPlaneNodeManip",
 									AlignPlaneNodeManip::getId(), 
@@ -84,19 +64,6 @@ __declspec(dllexport) MStatus uninitializePlugin(MObject obj)
 	MStatus status;
 	MFnPlugin plugin(obj);
 
-	/*
-	status = plugin.deregisterContextCommand( "AlignPlaneContext" );
-	if( !status ){
-		MGlobal::displayError( "Error deregistering AlignPlaneContext command" );
-		return status;
-	}
-
-	status = plugin.deregisterNode( AlignPlaneManip::getId() );
-	if( !status ){
-		MGlobal::displayError( "Error deregistering AlignPlaneManip node" );
-		return status;
-	}
-	*/
 	
 	status = plugin.deregisterNode( AlignPlaneNodeManip::getId() );
 	if( !status ){

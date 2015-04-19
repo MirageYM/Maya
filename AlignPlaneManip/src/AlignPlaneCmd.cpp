@@ -32,7 +32,7 @@ using namespace MayaUtility;
 
 //- - - - - - - - - - - - - - - - - -
 //
-AlignPlaneCmd::AlignPlaneCmd(): hasTweak_( false ), hasHistory_( false ){
+AlignPlaneCmd::AlignPlaneCmd(): hasTweak_( false ), hasHistory_( false ), isRecordHistory_( 1 ){
 
 	modifyParams_.center_[0] = modifyParams_.center_[1] = modifyParams_.center_[2] = 0.0;
 	modifyParams_.normal_[0] = modifyParams_.normal_[1] = modifyParams_.normal_[2] = 0.0;
@@ -62,6 +62,9 @@ void* AlignPlaneCmd::creator( void ){
 //- - - - - - - - - - - - - - - - - -
 //
 MStatus AlignPlaneCmd::doIt( const MArgList& arg ){
+
+	tweakIndexArray_.clear();
+	tweakVectorArray_.clear();
 	
 	return performCmd();
 }
@@ -103,6 +106,7 @@ bool AlignPlaneCmd::isUndoable( void ) const{
 //- - - - - - - - - - - - - - - - - -
 //
 MStatus AlignPlaneCmd::performCmd( void ){
+
 	
 	MGlobal::executeCommand( "constructionHistory -q -tgl", isRecordHistory_ );
 	if( !isRecordHistory_ ){
@@ -118,6 +122,7 @@ MStatus AlignPlaneCmd::performCmd( void ){
 	
 	MSelectionList selList;
 	MGlobal::getActiveSelectionList( selList );
+	initialSelList_ = selList;
 	MItSelectionList selListIter( selList );
 	selListIter.setFilter( MFn::kMesh );
 
@@ -136,9 +141,10 @@ MStatus AlignPlaneCmd::performCmd( void ){
 				fnCompList.add( component );
 				MFnSingleIndexedComponent fnComp( component );
 
-				targetInfo_.dagPath_ = dagPath;
+				targetInfo_.selDagPath_ = dagPath;
 				dagPath.extendToShape();
 				targetInfo_.targetMeshShapeDagPath_ = dagPath;
+				targetInfo_.initialMeshShape_ = dagPath.node();
 
 				++cnt;
 			}else{
@@ -150,9 +156,10 @@ MStatus AlignPlaneCmd::performCmd( void ){
 				fnCompList.add( component );
 				MFnSingleIndexedComponent fnComp( component );
 
-				targetInfo_.dagPath_ = dagPath;
+				targetInfo_.selDagPath_ = dagPath;
 				dagPath.extendToShape();
 				targetInfo_.targetMeshShapeDagPath_ = dagPath;
+				targetInfo_.initialMeshShape_ = dagPath.node();
 
 				++cnt;
 			}else{
@@ -190,6 +197,8 @@ MStatus AlignPlaneCmd::performUndoCmd( void ){
 	CHECK_MSTATUS( status );
 	
 	rollbackTweak();
+
+	MGlobal::setActiveSelectionList( initialSelList_ );
 	
 	return MS::kSuccess;
 }
@@ -225,16 +234,11 @@ MStatus AlignPlaneCmd::createModifierNode( void ){
 
 	//src/dst plug
 	MPlugArray	tempPlugArray;
-
-	MFnDependencyNode	fnMeshShape( targetInfo_.targetMeshShapeDagPath_.node() );
+	
+	//reconnect upstream
+	MFnDagNode	fnMeshShape( targetInfo_.targetMeshShapeDagPath_ );
 	targetInfo_.meshShapeNodeDstPlug_ = fnMeshShape.findPlug( "inMesh" );
 	targetInfo_.meshShapeNodeDstAttr_ = targetInfo_.meshShapeNodeDstPlug_.attribute();
-	targetInfo_.meshShapeNode_ = targetInfo_.targetMeshShapeDagPath_.node();
-	
-	//Tweak check
-	createTweakNode();
-
-	//reconnect upstream
 	targetInfo_.meshShapeNodeDstPlug_.connectedTo( tempPlugArray, true, false );
 
 	if( tempPlugArray.length() > 1 ){
@@ -242,7 +246,7 @@ MStatus AlignPlaneCmd::createModifierNode( void ){
 		return MS::kFailure;
 	}else{
 
-		if( tempPlugArray.length() == 0 ){
+		if( !targetInfo_.meshShapeNodeDstPlug_.isConnected() ){
 			hasHistory_ = false;
 			
 			//No history. duplicate current.
@@ -272,6 +276,8 @@ MStatus AlignPlaneCmd::createModifierNode( void ){
 			status = dagModifier_.doIt();
 			CHECK_MSTATUS( status );
 
+			fnUpstreamNode.getPath( targetInfo_.cachedDagPath_ );
+
 		}else{
 			hasHistory_ = true;
 			
@@ -281,15 +287,12 @@ MStatus AlignPlaneCmd::createModifierNode( void ){
 			dgModifier_.disconnect( targetInfo_.upstreamSrcPlug_, targetInfo_.meshShapeNodeDstPlug_ );
 		}
 
-		MPlug srcWorldMatPlug = MFnDependencyNode( targetInfo_.meshShapeNode_ ).findPlug( "worldMatrix" );
-		MPlug srcWorldInvMatPlug = MFnDependencyNode( targetInfo_.meshShapeNode_ ).findPlug( "worldInverseMatrix" );
-		
-		dgModifier_.connect( srcWorldMatPlug.elementByLogicalIndex(0), thisNodeWMatPlug );
-		dgModifier_.connect( srcWorldInvMatPlug.elementByLogicalIndex(0), thisNodeWInvMatPlug );
-		
 	}
 
-
+	//Tweak check
+	createTweakNode();
+	cleanupShapeTweakPnts();
+	
 	if( !targetInfo_.tweakNode_.isNull() ){
 		{
 			MPlug dstPlug( targetInfo_.tweakNode_, targetInfo_.tweakNodeDstAttr_ );
@@ -303,11 +306,20 @@ MStatus AlignPlaneCmd::createModifierNode( void ){
 			status = dgModifier_.connect( srcPlug, dstPlug );
 			CHECK_MSTATUS( status );
 		}
+		
 	}else{
 		dgModifier_.connect( targetInfo_.upstreamSrcPlug_, thisNodeInMeshPlug );
 	}
-	
+
+	targetInfo_.meshShapeNodeDstPlug_ = fnMeshShape.findPlug( "inMesh" );
+	targetInfo_.meshShapeNodeDstAttr_ = targetInfo_.meshShapeNodeDstPlug_.attribute();
 	dgModifier_.connect( thisNodeOutMeshPlug, targetInfo_.meshShapeNodeDstPlug_ );
+
+	MPlug srcWorldMatPlug = fnMeshShape.findPlug( "worldMatrix" );
+	MPlug srcWorldInvMatPlug = fnMeshShape.findPlug( "worldInverseMatrix" );
+		
+	dgModifier_.connect( srcWorldMatPlug.elementByLogicalIndex(0), thisNodeWMatPlug );
+	dgModifier_.connect( srcWorldInvMatPlug.elementByLogicalIndex(0), thisNodeWInvMatPlug );
 
 	dgModifier_.doIt();
 
@@ -319,7 +331,6 @@ MStatus AlignPlaneCmd::createModifierNode( void ){
 //
 void AlignPlaneCmd::createTweakNode( void ){
 
-	MFnDagNode fnDagMeshShape( targetInfo_.targetMeshShapeDagPath_.node() );
 	MFnDependencyNode	fnMeshShape( targetInfo_.targetMeshShapeDagPath_.node() );
 	MPlug tweakPlug = fnMeshShape.findPlug( "pnts" );
 
@@ -343,13 +354,18 @@ void AlignPlaneCmd::createTweakNode( void ){
 	MIntArray			tweakDstConnectionCountArray;
 	MPlugArray			tweakDstConnectionPlugArray;
 
-	MPlug meshTweakPlug = fnMeshShape.findPlug( "pnts" );
-
 	MObjectArray	tweakDataArray;
 
+	//create tweak node
+	targetInfo_.tweakNode_ = dgModifier_.createNode( "polyTweak" );
+	MFnDependencyNode	fnTweakNode( targetInfo_.tweakNode_ );
+	targetInfo_.tweakNodeSrcAttr_ = fnTweakNode.attribute( "output" );
+	targetInfo_.tweakNodeDstAttr_ = fnTweakNode.attribute( "inputPolymesh" );
+	MObject tweakNodeTweakAttr = fnTweakNode.attribute( "tweak" );
+	
 	//scan tweak plugs, gather information for Undo, then disconnect
-	for( unsigned int i = 0; i < meshTweakPlug.numElements(); ++i ){
-		MPlug tweakElem = meshTweakPlug.elementByPhysicalIndex( i );
+	for( unsigned int i = 0; i < tweakPlug.numElements(); ++i ){
+		MPlug tweakElem = tweakPlug.elementByPhysicalIndex( i );
 		if( tweakElem.isNull() ){
 			continue;
 		}
@@ -396,13 +412,7 @@ void AlignPlaneCmd::createTweakNode( void ){
 
 	}
 
-	//create tweak node and connect
-	targetInfo_.tweakNode_ = dgModifier_.createNode( "polyTweak" );
-	MFnDependencyNode	fnTweakNode( targetInfo_.tweakNode_ );
-	targetInfo_.tweakNodeSrcAttr_ = fnTweakNode.attribute( "output" );
-	targetInfo_.tweakNodeDstAttr_ = fnTweakNode.attribute( "inputPolymesh" );
-	MObject tweakNodeTweakAttr = fnTweakNode.attribute( "tweak" );
-
+	// connect
 	MPlug polyTweakPlug( targetInfo_.tweakNode_, tweakNodeTweakAttr );
 	int srcOffset = 0;
 	int dstOffset = 0;
@@ -425,8 +435,6 @@ void AlignPlaneCmd::createTweakNode( void ){
 		}
 	}
 
-	cleanupShapeTweakPnts();
-
 }
 
 //- - - - - - - - - - - - - - - - - -
@@ -434,18 +442,29 @@ void AlignPlaneCmd::createTweakNode( void ){
 void AlignPlaneCmd::cleanupShapeTweakPnts( void ){
 
 	//cleanup pnts
-	MFnDagNode fnDagMeshShape( targetInfo_.targetMeshShapeDagPath_.node() );
+	MFnDependencyNode fnDepMeshShape( targetInfo_.targetMeshShapeDagPath_.node() );
 
 	MFnNumericData fnNumData;
 	fnNumData.create( MFnNumericData::k3Float );
 	fnNumData.setData( 0.0f, 0.0f, 0.0f );
 	MObject v = fnNumData.object();
 
-	MPlug p = fnDagMeshShape.findPlug( "pnts" );
+	MPlug p = fnDepMeshShape.findPlug( "pnts" );
 	if( !p.isNull() ){
 		for( unsigned int i = 0; i < tweakIndexArray_.length(); ++i ){
 			MPlug tweakElem = p.elementByLogicalIndex( tweakIndexArray_[i] );
 			tweakElem.setValue( v );
+		}
+	}
+
+	if( !hasHistory_ ){
+		MFnDependencyNode fnUpstreamShape( targetInfo_.upstreamNode_ );
+		p = fnUpstreamShape.findPlug( "pnts" );
+		if( !p.isNull() ){
+			for( unsigned int i = 0; i < tweakIndexArray_.length(); ++i ){
+				MPlug tweakElem = p.elementByLogicalIndex( tweakIndexArray_[i] );
+				tweakElem.setValue( v );
+			}
 		}
 	}
 }
@@ -453,27 +472,65 @@ void AlignPlaneCmd::cleanupShapeTweakPnts( void ){
 //- - - - - - - - - - - - - - - - - -
 //
 MStatus AlignPlaneCmd::rollbackTweak( void ){
-	if( targetInfo_.tweakNode_.isNull() ){
-		return MS::kFailure;
-	}
-
-	MFnDagNode fnDagMeshShape( targetInfo_.targetMeshShapeDagPath_.node() );
-	MFnDependencyNode	fnMeshShape( targetInfo_.targetMeshShapeDagPath_.node() );
-	MPlug tweakPlug = fnMeshShape.findPlug( "pnts" );
 	
-	MPlug p = fnDagMeshShape.findPlug( "pnts" );
-	if( !p.isNull() ){
-		for( unsigned int i = 0; i < tweakIndexArray_.length(); ++i ){
-			MPlug tweakElem = p.elementByLogicalIndex( tweakIndexArray_[i] );
-			MFnNumericData fnNumData;
-			fnNumData.create( MFnNumericData::k3Float );
-			fnNumData.setData( tweakVectorArray_[i][0], tweakVectorArray_[i][1], tweakVectorArray_[i][2] );
-			MObject v = fnNumData.object();
-			tweakElem.setValue( v );
+	if( hasTweak_ ){
+
+		MFnDagNode	fnMeshShape( targetInfo_.targetMeshShapeDagPath_.node() );
+		MPlug p = fnMeshShape.findPlug( "pnts" );
+		
+		if( !p.isNull() ){
+			for( unsigned int i = 0; i < tweakIndexArray_.length(); ++i ){
+
+				MFnNumericData fnNumData;
+				fnNumData.create( MFnNumericData::k3Float );
+				fnNumData.setData( tweakVectorArray_[i][0], tweakVectorArray_[i][1], tweakVectorArray_[i][2] );
+				
+				MPlug tweakElem = p.elementByLogicalIndex( tweakIndexArray_[i] );
+				tweakElem.setValue( fnNumData.object() );
+			}
 		}
+	}
+	return MS::kSuccess;
+}
+
+//- - - - - - - - - - - - - - - - - -
+//
+MStatus AlignPlaneCmd::rollbackCachedMesh( void ){
+
+	if( !hasHistory_ ){
+		MFnDependencyNode	fnMeshShape( targetInfo_.targetMeshShapeDagPath_.node() );
+		MFnDependencyNode	fnCachedMeshShape( targetInfo_.cachedDagPath_.node() );
+
+		MPlug meshDstPlug = fnMeshShape.findPlug( "inMesh" );
+		MPlug meshSrcPlug = fnMeshShape.findPlug( "outMesh" );
+		MPlug cachedSrcPlug = fnCachedMeshShape.findPlug( "outMesh" );
+
+		#if 0
+		if( hasTweak_ ){
+			MDGModifier	dgModifier;
+			dgModifier.connect( cachedSrcPlug, meshDstPlug );
+			dgModifier.doIt();
+
+			MString cmd = MString( "dgeval " ) + fnMeshShape.name() + ".inMesh";
+			MGlobal::executeCommand( cmd, false, false );
+
+			dgModifier.undoIt();
+			
+		}else{
+			MObject meshData;
+			cachedSrcPlug.getValue( meshData );
+			meshSrcPlug.setValue( meshData );
+		}
+		#else
+		MObject meshData;
+		cachedSrcPlug.getValue( meshData );
+		meshSrcPlug.setValue( meshData );
+		#endif
+		
 	}
 
 	return MS::kSuccess;
+
 }
 	
 //- - - - - - - - - - - - - - - - - -
@@ -487,6 +544,7 @@ MStatus AlignPlaneCmd::rollbackNodeConnection( void ){
 
 
 	if( !hasHistory_ ){
+		rollbackCachedMesh();
 		status = dagModifier_.undoIt();
 		CHECK_MSTATUS( status );
 	}
@@ -499,7 +557,7 @@ MStatus AlignPlaneCmd::rollbackNodeConnection( void ){
 void AlignPlaneCmd::getInitialParam( void ){
 
 	MFnMesh	fnMesh( targetInfo_.targetMeshShapeDagPath_ );
-	MMatrix m = targetInfo_.dagPath_.inclusiveMatrix();
+	MMatrix m = targetInfo_.selDagPath_.inclusiveMatrix();
 
 	MPointArray	points;
 	fnMesh.getPoints( points, MSpace::kObject );

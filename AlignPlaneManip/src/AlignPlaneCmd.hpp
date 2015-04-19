@@ -38,12 +38,16 @@ class AlignPlaneCmd: public MPxCommand{
 	//Typedefs
 	struct ModifyTargetInfo{
 		MObject		selCompList_;
-		MDagPath	dagPath_;
+		MDagPath	selDagPath_;
+
+		
 		MDagPath	targetMeshShapeDagPath_;
+		MObject		initialMeshShape_;
+		
+		MDagPath	cachedDagPath_;
 
 		MObject		transformNode_;
 
-		MObject		meshShapeNode_;
 		MPlug		meshShapeNodeDstPlug_;
 		MObject		meshShapeNodeDstAttr_;
 		
@@ -89,6 +93,7 @@ class AlignPlaneCmd: public MPxCommand{
 	virtual void		cleanupShapeTweakPnts( void );
 	
 	virtual MStatus		rollbackTweak( void );
+	virtual MStatus		rollbackCachedMesh( void );
 	virtual MStatus		rollbackNodeConnection( void );
 	
 	virtual void		getInitialParam( void );
@@ -105,10 +110,12 @@ class AlignPlaneCmd: public MPxCommand{
 
 	ModifyTargetInfo	targetInfo_;
 	ModifyParams		modifyParams_;
+
+	MSelectionList		initialSelList_;
 	
 	bool				hasTweak_;
 	bool				hasHistory_;
-	bool				isRecordHistory_;
+	int					isRecordHistory_;
 	
 };
 
