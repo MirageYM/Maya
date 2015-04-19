@@ -21,7 +21,6 @@
 //project
 #include "maya_utility.hpp"
 #include "AlignPlaneNode.hpp"
-#include "AlignPlaneManip.hpp"
 #include "AlignPlaneCmd.hpp"
 
 using namespace MayaUtility;
