@@ -77,10 +77,12 @@ AlignPlaneNode::~AlignPlaneNode() {}
 MStatus AlignPlaneNode::compute( const MPlug& plug, MDataBlock& data ){
 
 	//- - - - - - - - - - - - - - - - - -
-	auto planeProj = [&]( MVector& dir, MVector projPos, MPoint org ){
-		MVector v = projPos - org;
-		double dot = dir * v;
-		return dir * dot + org;
+	struct planeProj{
+		inline MVector operator()( MVector& dir, MVector pos, MVector org ){
+			MVector v = pos - org;
+			double dot = dir * v;
+			return dir * dot + org;
+		};
 	};
 	//- - - - - - - - - - - - - - - - - -
 	
@@ -178,7 +180,7 @@ MStatus AlignPlaneNode::compute( const MPlug& plug, MDataBlock& data ){
 			fnMesh.getPoints( points, MSpace::kObject );
 
 			for( unsigned int i = 0; i < vertexIndices.length(); ++i ){
-				MPoint newPos = planeProj( projNormal, projPos, points[ vertexIndices[i] ] );
+				MPoint newPos = planeProj()( projNormal, projPos, points[ vertexIndices[i] ] );
 				MVector d = newPos - pp;
 				d *= scale;
 				points[ vertexIndices[i] ] = pp + d;
@@ -193,7 +195,7 @@ MStatus AlignPlaneNode::compute( const MPlug& plug, MDataBlock& data ){
 			for( unsigned int i = 0; i < vertexIndices.length(); ++i ){
 				fnMesh.getPoint( vertexIndices[i], pp, MSpace::kObject );
 				pivot += pp;
-				MPoint newPos = planeProj( projNormal, projPos, pp );
+				MPoint newPos = planeProj()( projNormal, projPos, pp );
 				MVector d = newPos - pp;
 				d *= scale;
 				fnMesh.setPoint( vertexIndices[i], pp + d, MSpace::kObject );

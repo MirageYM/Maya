@@ -69,13 +69,6 @@ SpreadNormalNode::~SpreadNormalNode() {}
 //
 MStatus SpreadNormalNode::compute( const MPlug& plug, MDataBlock& data ){
 
-	//- - - - - - - - - - - - - - - - - -
-	auto planeProj = [&]( MVector& dir, MVector projPos, MPoint org ){
-		MVector v = projPos - org;
-		double dot = dir * v;
-		return dir * dot + org;
-	};
-	//- - - - - - - - - - - - - - - - - -
 	
 	MStatus returnStatus;
 
