@@ -25,7 +25,7 @@ class WindowManager( object ):
 		self.windowLists = []
 		self.buttons = []
 
-		self.scripdJobId = maya.cmds.scriptJob( e = [ 'idle', 'MayaWindowTaskBar.WindowManager.getManager().onIdleEvent()' ] )
+		self.scriptJobId = None
 
 	#-----------------------------------------------
 	def updateButtons( self ):
@@ -83,6 +83,13 @@ class WindowManager( object ):
 	#-----------------------------------------------
 	def onIdleEvent(self):
 		self.updateButtons()
+
+	#-----------------------------------------------
+	def startScriptJob(self):
+		if( self.scriptJobId is not None ):
+			maya.cmds.scriptJob( k = WindowManager.selfInst.scriptJobId )
+			
+		self.scriptJobId = maya.cmds.scriptJob( ie = 'MayaWindowTaskBar.WindowManager.getManager().onIdleEvent()' )
 	
 	#-----------------------------------------------
 	@staticmethod
@@ -90,19 +97,20 @@ class WindowManager( object ):
 		if( WindowManager.selfInst is None ):
 			WindowManager.selfInst = WindowManager()
 		return WindowManager.selfInst
+	
 
 	#-----------------------------------------------
 	@staticmethod
 	def killManager():
 		if( WindowManager.selfInst is None ):
 			return
-		maya.cmds.scriptJob( k = WindowManager.selfInst.scripdJobId )
+		maya.cmds.scriptJob( k = WindowManager.selfInst.scriptJobId )
 		WindowManager.selfInst.removeButtons()
 		WindowManager.selfInst = None
 
 #-----------------------------------------------
 def start():
-	WindowManager.getManager()
+	WindowManager.getManager().startScriptJob()
 	
 
 #-----------------------------------------------
