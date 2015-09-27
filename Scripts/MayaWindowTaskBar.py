@@ -204,8 +204,9 @@ class WindowManager( object ):
 	## startLoop
 	def startLoop( self ):
 		self._loop_run = True
-		self._mainLoopThread = threading.Thread( target = self.mainLoop )
-		self._mainLoopThread.start()
+		if( self._mainLoopThread is None ):
+			self._mainLoopThread = threading.Thread( target = self.mainLoop )
+			self._mainLoopThread.start()
 		
 	#-----------------------------------------------
 	## stopLoop
