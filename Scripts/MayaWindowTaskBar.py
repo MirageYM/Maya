@@ -691,7 +691,7 @@ class WindowManager( object ):
 	## mainLoop
 	def mainLoop( self ):
 		while( self._loop_run.isSet() ):
-			maya.utils.executeInMainThreadWithResult( self.updateButtons )
+			maya.utils.executeDeferred( self.updateButtons )
 			time.sleep( Setting.sleepTime )
 	
 	#-----------------------------------------------
