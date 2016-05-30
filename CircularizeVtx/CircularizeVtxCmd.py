@@ -7,7 +7,7 @@ import maya.OpenMaya as OpenMaya
 import maya.OpenMayaMPx as OpenMayaMPx
 import maya.OpenMayaUI as OpenMayaUI
 
-import polyModifier as PolyModifier
+import CircularizeVtxPM as PolyModifier
 
 kCircularizeVtxCmdName = 'CircularizeVtxCmd'
 kCircularizeVtxNodeName = 'CircularizeVtxNode'
