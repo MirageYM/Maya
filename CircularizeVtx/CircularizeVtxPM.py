@@ -400,6 +400,7 @@ class polyModifierCmd(OpenMayaMPx.MPxCommand):
 		# Node State Information
 		self.__fHasHistory = False
 		self.__fHasTweaks = False
+		self.__fHasSrcTweaks = False
 		self.__fHasRecordHistory = False
 
 		# Cached Tweak Data (for undo)
@@ -509,29 +510,16 @@ class polyModifierCmd(OpenMayaMPx.MPxCommand):
 			self.__collectNodeState()
 
 			if (not self.__fHasHistory) and (not self.__fHasRecordHistory):
-				meshNode = self.__fDagPath.node()
-
-				# Pre-process the mesh - Cache old mesh (including tweaks, if applicable)
-				#
-				self.__cacheMeshData()
-				self.__cacheMeshTweaks()
-
-				# Call the directModifier
-				#
-				self._directModifier(meshNode)
+				return
 			else:
 				modifierNode = self.__createModifierNode()
 				self._initModifierNode(modifierNode)
 				self.__connectNodes(modifierNode)
-
+				self.__fModifierNodeName = OpenMaya.MFnDependencyNode( modifierNode ).name()
 
 	def _redoModifyPoly(self):
 		if (not self.__fHasHistory) and (not self.__fHasRecordHistory):
-			meshNode = self.__fDagPath.node()
-			# Call the directModifier - No need to pre-process the mesh data again
-			#							 since we already have it.
-			#
-			self._directModifier(meshNode)
+			return
 		else:
 			# Call the redo on the DG and DAG modifiers
 			#
@@ -542,7 +530,7 @@ class polyModifierCmd(OpenMayaMPx.MPxCommand):
 
 	def _undoModifyPoly(self):
 		if (not self.__fHasHistory) and (not self.__fHasRecordHistory):
-			self.__undoDirectModifier()
+			return
 		else:
 			self.__fDGModifier.undoIt()
 
@@ -561,7 +549,6 @@ class polyModifierCmd(OpenMayaMPx.MPxCommand):
 				self.__undoTweakProcessing()
 			except:
 				statusError("undoTweakProcessing")
-
 
 	####################### PRIVATE #######################
 
@@ -594,6 +581,7 @@ class polyModifierCmd(OpenMayaMPx.MPxCommand):
 
 			self.upstreamNodeTransform = OpenMaya.MObject()
 			self.upstreamNodeShape = OpenMaya.MObject()
+			self.upstreamNodeShapeHdl = None
 			self.upstreamNodeSrcPlug = OpenMaya.MPlug()
 			self.upstreamNodeSrcAttr = OpenMaya.MObject()
 
@@ -666,9 +654,8 @@ class polyModifierCmd(OpenMayaMPx.MPxCommand):
 						self.__fHasTweaks = True
 						break
 
-		result = 0
-		OpenMaya.MGlobal.executeCommand("constructionHistory -q -tgl", result)
-		self.__fHasRecordHistory = (0 != result)
+		import maya.cmds as cmds
+		self.__fHasRecordHistory = cmds.constructionHistory( q=True, tgl=True )
 
 
 	# Modifier node methods
@@ -753,6 +740,7 @@ class polyModifierCmd(OpenMayaMPx.MPxCommand):
 			# upstreamNodeShape off of the source plug.
 			#
 			data.upstreamNodeShape = data.upstreamNodeSrcPlug.node()
+			data.upstreamNodeShapeHdl = OpenMaya.MObjectHandle( data.upstreamNodeShape )
 			depNodeFn.setObject(data.upstreamNodeShape)
 			data.upstreamNodeSrcAttr = data.upstreamNodeSrcPlug.attribute()
 
@@ -834,6 +822,33 @@ class polyModifierCmd(OpenMayaMPx.MPxCommand):
 		data.modifierNodeSrcAttr = depNodeFn.attribute("outMesh")
 		data.modifierNodeDestAttr = depNodeFn.attribute("inMesh")
 
+	def __cleanupShapeTweakPnts( self, data ):
+		
+		if( not self.__fHasTweaks ):
+			return
+			
+		depNodeFn = OpenMaya.MFnDependencyNode()
+		depNodeFn.setObject(data.meshNodeShape)
+		meshTweakPlug = depNodeFn.findPlug("pnts")
+
+		fnNumData = OpenMaya.MFnNumericData()
+		fnNumData.create( OpenMaya.MFnNumericData.k3Float )
+		fnNumData.setData3Float( 0.0, 0.0, 0.0 )
+		v = fnNumData.object()
+
+		numElements = meshTweakPlug.numElements()
+		for i in range(numElements):
+			tweak = meshTweakPlug.elementByPhysicalIndex(i)
+			tweak.setMObject( v )
+
+		if( not self.__fHasHistory ):
+			depNodeFn.setObject( data.upstreamNodeShape )
+			meshTweakPlug = depNodeFn.findPlug("pnts")
+			numElements = meshTweakPlug.numElements()
+			for i in range(numElements):
+				tweak = meshTweakPlug.elementByPhysicalIndex(i)
+				tweak.setMObject( v )
+		
 
 	def __processTweaks(self, data):
 		# Clear tweak undo information (to be rebuilt)
@@ -976,7 +991,12 @@ class polyModifierCmd(OpenMayaMPx.MPxCommand):
 
 					# Apply tweak source connection data
 					#
+
+					hasSrc = False
+					hasDst = False
+					
 					if 0 < tweakSrcConnectionCountArray[i*numChildren + j]:
+						hasSrc = True
 						k = 0
 						while (k < tweakSrcConnectionCountArray[i*numChildren + j]):
 							self.__fDGModifier.connect(tweakChild, tweakSrcConnectionPlugArray[srcOffset])
@@ -986,9 +1006,16 @@ class polyModifierCmd(OpenMayaMPx.MPxCommand):
 					# Apply tweak destination connection data
 					#
 					if 0 < tweakDstConnectionCountArray[i*numChildren + j]:
+						hasDst = True
 						self.__fDGModifier.connect(tweakDstConnectionPlugArray[dstOffset], tweakChild)
 						dstOffset += 1
 
+					if( not hasSrc and not hasDst ):
+						meshTweak = meshTweakPlug.elementByLogicalIndex( self.__fTweakIndexArray[i] )
+						meshTweakChild = meshTweak.child(j)
+						val = meshTweakChild.asDouble()
+						tweakChild.setDouble(val)
+						meshTweakChild.setDouble(0.0)
 
 	# Node connection method
 	#
@@ -1068,8 +1095,11 @@ class polyModifierCmd(OpenMayaMPx.MPxCommand):
 		# Connect the nodes
 		#
 		if self.__fHasTweaks:
-			tweakDestPlug = OpenMaya.MPlug(data.tweakNode, data.tweakNodeDestAttr)
-			self.__fDGModifier.connect(data.upstreamNodeSrcPlug, tweakDestPlug)
+			try:
+				self.__fDGModifier.connect(data.upstreamNodeShape, data.upstreamNodeSrcAttr, data.tweakNode, data.tweakNodeDestAttr )
+				self.__cleanupShapeTweakPnts( data )
+			except:
+				statusError('tweak node dstAttr connection error' )
 
 			tweakSrcPlug = OpenMaya.MPlug(data.tweakNode, data.tweakNodeSrcAttr)
 			modifierDestPlug = OpenMaya.MPlug(modifierNode, data.modifierNodeDestAttr)
@@ -1082,8 +1112,15 @@ class polyModifierCmd(OpenMayaMPx.MPxCommand):
 		meshDestAttr = OpenMaya.MPlug(data.meshNodeShape, data.meshNodeDestAttr)
 		self.__fDGModifier.connect(modifierSrcPlug, meshDestAttr)
 
+		self._preModifierDoIt( self.__fDGModifier, modifierNode )
 		self.__fDGModifier.doIt()
+		self._postModifierDoIt( self.__fDGModifier, modifierNode )
 
+	def _preModifierDoIt( self, dgModifier, modifierNode ):
+		pass
+	
+	def _postModifierDoIt( self, dgModifier, modifierNode ):
+		pass
 
 	# Mesh caching methods - Only used in the directModifier case
 	#
@@ -1208,6 +1245,11 @@ class polyModifierCmd(OpenMayaMPx.MPxCommand):
 			# the shape relies solely on an outMesh when there is no history nor tweaks.
 			#
 			if self.__fHasTweaks:
+				self.__undoTweakProcessing()
+				print( 'hasTwweak' )
+
+				"""
+			
 				dgModifier = OpenMaya.MDGModifier()
 				dgModifier.connect(dupMeshNodeSrcPlug, meshNodeDestPlug)
 				try:
@@ -1226,6 +1268,8 @@ class polyModifierCmd(OpenMayaMPx.MPxCommand):
 				# Disconnect the duplicate meshNode now
 				#
 				dgModifier.undoIt()
+				"""
+				
 			else:
 				try:
 					meshData = dupMeshNodeSrcPlug.asMObject()

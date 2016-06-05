@@ -8,6 +8,7 @@ import maya.OpenMayaMPx as OpenMayaMPx
 import maya.OpenMayaUI as OpenMayaUI
 
 import CircularizeVtxPM as PolyModifier
+reload( PolyModifier )
 
 kCircularizeVtxCmdName = 'CircularizeVtxCmd'
 kCircularizeVtxNodeName = 'CircularizeVtxNode'
@@ -124,6 +125,13 @@ class CircularizeVtxNodeManip( OpenMayaMPx.MPxManipContainer ):
 		py = ppy.asDouble()
 		pz = ppz.asDouble()
 		
+		pwm = fnNode.findPlug( 'wm' )
+		o = pwm.asMObject()
+		wm = OpenMaya.MFnMatrixData( o ).matrix()
+		pwim = fnNode.findPlug( 'wim' )
+		o = pwim.asMObject()
+		wim = OpenMaya.MFnMatrixData( o ).matrix()
+		
 		if( theIndex in self.plugIdxMap ):
 			plugName = self.plugIdxMap[theIndex]
 			numData = OpenMaya.MFnNumericData()
@@ -132,6 +140,7 @@ class CircularizeVtxNodeManip( OpenMayaMPx.MPxManipContainer ):
 				numDataObj = numData.create(OpenMaya.MFnNumericData.k3Float)
 				v = OpenMaya.MPoint()
 				self.getConverterManipValue( fnPivot.pointIndex(), v )
+				v = v * wim
 				numData.setData3Float( v[0], v[1], v[2] )
 				manipData = OpenMayaUI.MManipData(numDataObj)
 				
@@ -141,8 +150,9 @@ class CircularizeVtxNodeManip( OpenMayaMPx.MPxManipContainer ):
 				numDataObj = numData.create(OpenMaya.MFnNumericData.k3Float)
 				r = OpenMaya.MEulerRotation()
 				self.getConverterManipValue( fnDir.rotationIndex(), r )
-				v = OpenMaya.MPoint( 0.0, 1.0, 0.0, 1.0 )
+				v = OpenMaya.MPoint( 0.0, 1.0, 0.0, 0.0 )
 				v = v * r.asMatrix()
+				v = v * wim
 				numData.setData3Float( v[0], v[1], v[2] )
 				manipData = OpenMayaUI.MManipData(numDataObj)
 				
@@ -164,11 +174,18 @@ class CircularizeVtxNodeManip( OpenMayaMPx.MPxManipContainer ):
 	#-----------------------------------------------
 	def nVecToRot( self ):
 		fnNode = OpenMaya.MFnDependencyNode( self.parentNodeHdl.object() )
+		pwm = fnNode.findPlug( 'wm' )
+		o = pwm.asMObject()
+		wm = OpenMaya.MFnMatrixData( o ).matrix()
 		nx = fnNode.findPlug('nx')
 		ny = fnNode.findPlug('ny')
 		nz = fnNode.findPlug('nz')
 
-		qrot = OpenMaya.MVector( 0.0, 1.0, 0.0 ).rotateTo( OpenMaya.MVector( nx.asDouble(), ny.asDouble(), nz.asDouble() ) )
+		v = OpenMaya.MPoint( 0.0, 1.0, 0.0, 0.0 )
+		nw = OpenMaya.MPoint( nx.asDouble(), ny.asDouble(), nz.asDouble(), 0.0 )
+		nw = nw * wm
+
+		qrot = OpenMaya.MVector( v ).rotateTo( OpenMaya.MVector( nw[0], nw[1], nw[2] ) )
 		erot = qrot.asEulerRotation()
 
 		return [ erot[0], erot[1], erot[2] ]
@@ -192,13 +209,22 @@ class CircularizeVtxNodeManip( OpenMayaMPx.MPxManipContainer ):
 		px = ppx.asDouble()
 		py = ppy.asDouble()
 		pz = ppz.asDouble()
+
+		pwm = fnNode.findPlug( 'wm' )
+		o = pwm.asMObject()
+		wm = OpenMaya.MFnMatrixData( o ).matrix()
+		pwim = fnNode.findPlug( 'wim' )
+		o = pwim.asMObject()
+		wim = OpenMaya.MFnMatrixData( o ).matrix()
+		
+		pw = OpenMaya.MPoint( px, py, pz ) * wm
 		
 		#if( fnCircleSweep.centerIndex() == theIndex or fnDir.startPointIndex() ):
 		if( fnCircleSweep.centerIndex() == theIndex or fnDir.rotationCenterIndex() ):
 			
 			numData = OpenMaya.MFnNumericData()
 			numDataObj = numData.create(OpenMaya.MFnNumericData.k3Float)
-			numData.setData3Float(px,py,pz)
+			numData.setData3Float( pw[0], pw[1], pw[2] )
 			manipData = OpenMayaUI.MManipData(numDataObj)
 			return manipData
 
@@ -218,7 +244,7 @@ class CircularizeVtxNodeManip( OpenMayaMPx.MPxManipContainer ):
 		elif( fnPivot.pointIndex() == theIndex ):
 			numData = OpenMaya.MFnNumericData()
 			numDataObj = numData.create(OpenMaya.MFnNumericData.k3Float)
-			numData.setData3Float(px,py,pz)
+			numData.setData3Float( pw[0], pw[1], pw[2] )
 			manipData = OpenMayaUI.MManipData(numDataObj)
 			return manipData
 		
@@ -258,7 +284,7 @@ class CircularizeVtxFactory(PolyModifier.polyModifierFty):
 		self.wimat = OpenMaya.MMatrix()
 		self.phaseMode = 0
 		self.weight = 1.0
-		self.distScale = 1.0
+		self.radiusScale = 1.0
 		self.normalMode = 0
 		self.normalVec = OpenMaya.MVector()
 		self.useRay = 0
@@ -273,68 +299,17 @@ class CircularizeVtxFactory(PolyModifier.polyModifierFty):
 			self.doCircularizeDistAngle()
 		else:
 			return
-		
-	#-----------------------------------------------
-	def doCircularizeDistOnly(self):
-		
-		meshFn = OpenMaya.MFnMesh(self.mesh)
-		selVtxCount = self.vtxIds.length()
-		pv = OpenMaya.MPoint( self.pivot ) * self.wimat
-		
-		points = OpenMaya.MPointArray()
-		meshFn.getPoints( points, OpenMaya.MSpace.kObject )
-		if( points.length() <= 0 ):
-			return
-
-		if( selVtxCount <= 0 ):
-			return
-
-		dists = 0.0
-		for i in range( selVtxCount ):
-			pIndex = self.vtxIds[i]
-			p = points[pIndex]
-			e = p - pv
-			dists += e.length()
-
-		dists /= selVtxCount
-		dists *= self.distScale
-		
-		for i in range( selVtxCount ):
-			pIndex = self.vtxIds[i]
-			p = points[pIndex]
-			e = p - pv
-			en = p - pv
-			en.normalize()
-			en *= dists
-			e = pv + ( e * ( 1.0 - self.weight ) + en * self.weight )
-			points.set( OpenMaya.MPoint( e ), pIndex )
-
-
-		meshFn.setPoints( points, OpenMaya.MSpace.kObject )
 
 	#-----------------------------------------------
-	def doCircularizeDistAngle(self):
-		meshFn = OpenMaya.MFnMesh( self.mesh )
-		selVtxCount = self.vtxIds.length()
+	@staticmethod
+	def getInitialCoordAndMatrix( vtxIds, points, normalVec ):
+		#compute initial coordinate system v0-n0-t
 		mUtil = OpenMaya.MScriptUtil()
 		
-		pv = OpenMaya.MPoint( self.pivot ) * self.wimat
-		
-		points = OpenMaya.MPointArray()
-		meshFn.getPoints( points, OpenMaya.MSpace.kObject )
-		if( points.length() <= 0 ):
-			return
-
-		if( selVtxCount <= 2 ):
-			return
-
-		da = ( math.pi * 2.0 ) / selVtxCount
-			
-		#compute initial coordinate system v0-n0-t
-		n0 = self.normalVec
+		n0 = normalVec
 		n0.normalize()
-		e0 = points[1] - points[0]
-		e1 = points[2] - points[0]
+		e0 = points[vtxIds[1]] - points[vtxIds[0]]
+		e1 = points[vtxIds[2]] - points[vtxIds[0]]
 		if(  ( e0 ^ e1 ) * n0 < 0.0 ):
 			n0 = -n0
 			
@@ -345,7 +320,6 @@ class CircularizeVtxFactory(PolyModifier.polyModifierFty):
 		t.normalize()
 		v0 = n0 ^ t
 		v0.normalize()
-		vs = []
 
 		m = [ v0.x, n0.x, t.x, 0.0,
 			  v0.y, n0.y, t.y, 0.0,
@@ -355,12 +329,19 @@ class CircularizeVtxFactory(PolyModifier.polyModifierFty):
 		localCoordMat = OpenMaya.MMatrix()
 		mUtil.createMatrixFromList( m, localCoordMat )
 		localCoordMatInv = localCoordMat.inverse()
+
+		return ( v0, n0, t, localCoordMat, localCoordMatInv )
+	
+	#-----------------------------------------------
+	@staticmethod
+	def getSortedVtxIdsAndAngle( vtxIds, pv, points, localCoordMat ):
+		selVtxCount = vtxIds.length()
+		radius = 0.0
+		vs = []
 		
-		#sort by center angle, compute avg radius
-		dists = 0.0
 		for i in range( selVtxCount ):
-			v = points[ self.vtxIds[i] ] - pv
-			dists += v.length()
+			v = points[ vtxIds[i] ] - pv
+			radius += v.length()
 			vl = OpenMaya.MVector( OpenMaya.MPoint( v ) * localCoordMat )
 			vl.y = 0.0
 			vl.normalize()
@@ -374,24 +355,96 @@ class CircularizeVtxFactory(PolyModifier.polyModifierFty):
 			while( a < 0.0 ):
 				a += math.pi * 2.0
 
-			vs.append( ( self.vtxIds[i], a ) )
-			
-		dists /= selVtxCount
-		dists *= self.distScale
+			vs.append( ( vtxIds[i], a ) )
+		
+		radius /= selVtxCount
 
 		vs.sort( key = lambda x: x[1], reverse = False )
 
+		return ( vs, radius )
+		
+	#-----------------------------------------------
+	def doCircularizeDistOnly(self):
+		
+		meshFn = OpenMaya.MFnMesh(self.mesh)
+		selVtxCount = self.vtxIds.length()
+		#pv = OpenMaya.MPoint( self.pivot ) * self.wimat
+		pv = OpenMaya.MPoint( self.pivot )
+		
+		points = OpenMaya.MPointArray()
+		meshFn.getPoints( points, OpenMaya.MSpace.kObject )
+		if( points.length() <= 0 ):
+			return
+
+		if( selVtxCount <= 0 ):
+			return
+
+		radius = 0.0
+		for i in range( selVtxCount ):
+			pIndex = self.vtxIds[i]
+			p = points[pIndex]
+			e = p - pv
+			radius += e.length()
+
+		radius /= selVtxCount
+		radius *= self.radiusScale
+		
+		for i in range( selVtxCount ):
+			pIndex = self.vtxIds[i]
+			p = points[pIndex]
+			e = p - pv
+			en = p - pv
+			en.normalize()
+			en *= radius
+			e = pv + ( e * ( 1.0 - self.weight ) + en * self.weight )
+			points.set( OpenMaya.MPoint( e ), pIndex )
+
+
+		meshFn.setPoints( points, OpenMaya.MSpace.kObject )
+
+	#-----------------------------------------------
+	def doCircularizeDistAngle(self):
+		meshFn = OpenMaya.MFnMesh( self.mesh )
+		selVtxCount = self.vtxIds.length()
+		
+		#pv = OpenMaya.MPoint( self.pivot ) * self.wimat
+		pv = OpenMaya.MPoint( self.pivot )
+		
+		points = OpenMaya.MPointArray()
+		meshFn.getPoints( points, OpenMaya.MSpace.kObject )
+		if( points.length() <= 0 ):
+			return
+
+		if( selVtxCount <= 2 ):
+			return
+
+		da = ( math.pi * 2.0 ) / selVtxCount
+			
+		#compute initial coordinate system v0-n0-t
+		v0, n0, t, localCoordMat, localCoordMatInv = CircularizeVtxFactory.getInitialCoordAndMatrix( self.vtxIds, points, self.normalVec )
+		
+		#sort by center angle, compute avg radius
+		vs, radius = CircularizeVtxFactory.getSortedVtxIdsAndAngle( self.vtxIds, pv, points, localCoordMat )
+		radius *= self.radiusScale
+
 		accParams = meshFn.autoUniformGridParams()
 
+		avgAngleDelta = 0.0
+		for i, elem in enumerate( vs ):
+			idx = elem[0]
+			a = da * i
+			avgAngleDelta += a - elem[1]
+		avgAngleDelta /= len( vs )
+			
 		for i, elem in enumerate( vs ):
 			idx = elem[0]
 			a = da * i
 			a += self.rot
-			a = -a
+			a = -a + avgAngleDelta
 			
 			dSin = math.sin( a )
 			dCos = math.cos( a )
-			v = OpenMaya.MPoint( dCos * dists, 0.0, -dSin * dists, 1.0 )
+			v = OpenMaya.MPoint( dCos * radius, 0.0, -dSin * radius, 1.0 )
 			v = OpenMaya.MVector( v * localCoordMatInv )
 			
 			e = pv + ( ( points[ idx ] - pv ) * ( 1.0 - self.weight ) + v * self.weight )
@@ -433,7 +486,7 @@ class CircularizeVtxNode(PolyModifier.polyModifierNode):
 	worldInverseMatrix = OpenMaya.MObject()
 
 	weight = OpenMaya.MObject()
-	distScale = OpenMaya.MObject()
+	radiusScale = OpenMaya.MObject()
 	phaseMode = OpenMaya.MObject()
 	normalMode = OpenMaya.MObject()
 	rayMode = OpenMaya.MObject()
@@ -488,7 +541,7 @@ class CircularizeVtxNode(PolyModifier.polyModifierNode):
 					wmatData = data.inputValue( CircularizeVtxNode.worldMatrix )
 					wimatData = data.inputValue( CircularizeVtxNode.worldInverseMatrix )
 					wtData = data.inputValue( CircularizeVtxNode.weight )
-					scData = data.inputValue( CircularizeVtxNode.distScale )
+					scData = data.inputValue( CircularizeVtxNode.radiusScale )
 					pmodeData = data.inputValue( CircularizeVtxNode.phaseMode )
 					nmodeData = data.inputValue( CircularizeVtxNode.normalMode )
 					nOffsetData = data.inputValue( CircularizeVtxNode.nOffset )
@@ -532,7 +585,7 @@ class CircularizeVtxNode(PolyModifier.polyModifierNode):
 				self.fCircularizeVtxFactory.wmat = wmat
 				self.fCircularizeVtxFactory.wimat = wimat
 				self.fCircularizeVtxFactory.weight = weight
-				self.fCircularizeVtxFactory.distScale = sc
+				self.fCircularizeVtxFactory.radiusScale = sc
 				self.fCircularizeVtxFactory.phaseMode = pmode
 				self.fCircularizeVtxFactory.normalMode = nmode
 				self.fCircularizeVtxFactory.nOffset = nOffset
@@ -642,9 +695,9 @@ class CircularizeVtxNode(PolyModifier.polyModifierNode):
 		setNumAttrDefault( numAttrFn )
 		CircularizeVtxNode.addAttribute( CircularizeVtxNode.nOffset )
 
-		CircularizeVtxNode.distScale = numAttrFn.create( 'distScale', 'sc', OpenMaya.MFnNumericData.kDouble, 1.0 )
+		CircularizeVtxNode.radiusScale = numAttrFn.create( 'radiusScale', 'sc', OpenMaya.MFnNumericData.kDouble, 1.0 )
 		setNumAttrDefault( numAttrFn )
-		CircularizeVtxNode.addAttribute( CircularizeVtxNode.distScale )
+		CircularizeVtxNode.addAttribute( CircularizeVtxNode.radiusScale )
 		
 		CircularizeVtxNode.phaseMode = numAttrFn.create( 'phaseMode', 'pm', OpenMaya.MFnNumericData.kInt, 1 )
 		setNumAttrDefault( numAttrFn )
@@ -676,7 +729,7 @@ class CircularizeVtxNode(PolyModifier.polyModifierNode):
 		CircularizeVtxNode.attributeAffects(CircularizeVtxNode.worldMatrix, CircularizeVtxNode.outMesh)
 		CircularizeVtxNode.attributeAffects(CircularizeVtxNode.worldInverseMatrix, CircularizeVtxNode.outMesh)
 		CircularizeVtxNode.attributeAffects(CircularizeVtxNode.weight, CircularizeVtxNode.outMesh)
-		CircularizeVtxNode.attributeAffects(CircularizeVtxNode.distScale, CircularizeVtxNode.outMesh)
+		CircularizeVtxNode.attributeAffects(CircularizeVtxNode.radiusScale, CircularizeVtxNode.outMesh)
 		CircularizeVtxNode.attributeAffects(CircularizeVtxNode.phaseMode, CircularizeVtxNode.outMesh)
 		CircularizeVtxNode.attributeAffects(CircularizeVtxNode.normalMode, CircularizeVtxNode.outMesh)
 		CircularizeVtxNode.attributeAffects(CircularizeVtxNode.nOffset, CircularizeVtxNode.outMesh)
@@ -702,6 +755,8 @@ class CircularizeVtx(PolyModifier.polyModifierCmd):
 		self.selVtxComp = OpenMaya.MObject()
 		self.circularizeVtxFactory = CircularizeVtxFactory()
 
+		self.selDagPath = None
+		self.selComp = None
 
 	#-----------------------------------------------
 	def isUndoable(self):
@@ -722,13 +777,18 @@ class CircularizeVtx(PolyModifier.polyModifierCmd):
 		while not selListIter.isDone():
 			dagPath = OpenMaya.MDagPath()
 			component = OpenMaya.MObject()
-			itemMatches = True
-			selListIter.getDagPath(dagPath, component)
+			try:
+				selListIter.getDagPath(dagPath, component)
+			except:
+				pass
 
 			# Check for selected components
 			#
-			if itemMatches and (component.apiType() == OpenMaya.MFn.kMeshVertComponent):
+			if component.apiType() == OpenMaya.MFn.kMeshVertComponent:
 				if not found:  
+					self.selDagPath = dagPath
+					self.selComp = component
+					
 					compListFn.add(component)
 					self.vtxCompList = compListFn.object()
 
@@ -742,6 +802,96 @@ class CircularizeVtx(PolyModifier.polyModifierCmd):
 				else:
 					foundMultiple = True
 					break
+				
+			elif component.apiType() == OpenMaya.MFn.kMeshEdgeComponent:
+				if not found:  
+					self.selDagPath = dagPath
+					self.selComp = component
+					
+					itr = OpenMaya.MItMeshEdge( dagPath, component )
+					vtxIds = set()
+					while not itr.isDone():
+						vtxIds.add( itr.index( 0 ) )
+						vtxIds.add( itr.index( 1 ) )
+						itr.next()
+
+					compFn = OpenMaya.MFnSingleIndexedComponent()
+					component = compFn.create( OpenMaya.MFn.kMeshVertComponent )
+					for i in vtxIds:
+						compFn.addElement( i )
+					compListFn.add(component)
+					self.vtxCompList = compListFn.object()
+					self.selVtxComp = component
+					compFn.getElements(self.vtxIds)
+					
+					dagPath.extendToShape()
+					self._setMeshNode(dagPath)
+					found = True
+				else:
+					foundMultiple = True
+					break
+				
+			elif component.apiType() == OpenMaya.MFn.kMeshPolygonComponent:
+				if not found:  
+					self.selDagPath = dagPath
+					self.selComp = component
+					
+					compListFn.add(component)
+					compFn = OpenMaya.MFnSingleIndexedComponent(component)
+					selFaceIds = OpenMaya.MIntArray()
+					compFn.getElements( selFaceIds )
+					selFaceIdSet = set()
+					
+					for i in xrange( selFaceIds.length() ):
+						selFaceIdSet.add( selFaceIds[i] )
+
+					vtxIds = set()
+				
+					itr = OpenMaya.MItMeshPolygon( dagPath, component )
+					while not itr.isDone():
+						connVtx = OpenMaya.MIntArray()
+						itr.getVertices( connVtx )
+						for i in xrange( connVtx.length() ):
+							vtxIds.add( connVtx[i] )
+						itr.next()
+
+					compFn = OpenMaya.MFnSingleIndexedComponent()
+					component = compFn.create( OpenMaya.MFn.kMeshVertComponent )
+					for i in vtxIds:
+						compFn.addElement( i )
+
+					itr = OpenMaya.MItMeshVertex( dagPath, component )
+					borderVtxIds = set()
+					while not itr.isDone():
+						connFaceIds = OpenMaya.MIntArray()
+						itr.getConnectedFaces( connFaceIds )
+						isSelBound = False
+						for i in xrange( connFaceIds.length() ):
+							if( not ( connFaceIds[i] in selFaceIdSet ) ):
+								isSelBound = True
+								break
+
+						if( isSelBound ):
+							borderVtxIds.add( itr.index() )
+						
+						itr.next()
+
+					compFn = OpenMaya.MFnSingleIndexedComponent()
+					component = compFn.create( OpenMaya.MFn.kMeshVertComponent )
+					for i in borderVtxIds:
+						compFn.addElement( i )
+					compListFn.add(component)
+					self.vtxCompList = compListFn.object()
+					self.selVtxComp = component
+					compFn.getElements(self.vtxIds)
+					
+					dagPath.extendToShape()
+					self._setMeshNode(dagPath)
+					found = True
+				else:
+					foundMultiple = True
+					break
+
 
 			selListIter.next()
 
@@ -760,17 +910,19 @@ class CircularizeVtx(PolyModifier.polyModifierCmd):
 					self.displayError('CircularizeVtx command failed!')
 					raise
 				else:
+					OpenMaya.MGlobal.select( self.selDagPath, self.selComp, OpenMaya.MGlobal.kReplaceList )
+					OpenMaya.MGlobal.executeCommandOnIdle( 'select -add ' + self._getModifierNodeName() + ';ShowManipulators();' )
 					self.setResult('CircularizeVtx command succeeded!')
 			else:
 				self.displayError('CircularizeVtx command failed' )
 		else:
 			self.displayError('CircularizeVtx command failed: Unable to find selected Components')
 
-
 	#-----------------------------------------------
 	def redoIt(self):
 		try:
 			self._redoModifyPoly()
+			OpenMaya.MGlobal.executeCommandOnIdle( 'select -r ' + self._getModifierNodeName() + '; ShowManipulators();' )
 			self.setResult('CircularizeVtx command succeeded!')
 		except:
 			self.displayError('CircularizeVtx command failed!')
@@ -797,21 +949,24 @@ class CircularizeVtx(PolyModifier.polyModifierCmd):
 		itrVtx = OpenMaya.MItMeshVertex( self._getMeshNode(), self.selVtxComp )
 		if( itrVtx.count() <= 0 ):
 			return
-		
+
+		#make tempolar normal
 		c = [0.0, 0.0, 0.0]
 		n = OpenMaya.MVector()
 		while( not itrVtx.isDone() ):
-			p = itrVtx.position( OpenMaya.MSpace.kWorld )
+			p = itrVtx.position( OpenMaya.MSpace.kObject )
 			vn = OpenMaya.MVector()
-			itrVtx.getNormal( vn, OpenMaya.MSpace.kWorld )
+			itrVtx.getNormal( vn, OpenMaya.MSpace.kObject )
 			c[0] = p[0] + c[0]
 			c[1] = p[1] + c[1]
 			c[2] = p[2] + c[2]
 			n = vn + n
 			itrVtx.next()
+			
 		c[0] = c[0] / itrVtx.count()
 		c[1] = c[1] / itrVtx.count()
 		c[2] = c[2] / itrVtx.count()
+		pv = OpenMaya.MPoint( c[0], c[1], c[2] )
 		n = n / itrVtx.count()
 		if( n.length() == 0.0 ):
 			n = OpenMaya.MVector( 1.0, 1.0, 1.0 )
@@ -819,6 +974,43 @@ class CircularizeVtx(PolyModifier.polyModifierCmd):
 		else:
 			n.normalize()
 
+		#make avg normal
+		compListFn = OpenMaya.MFnComponentListData( self.vtxCompList )
+		vtxIds = OpenMaya.MIntArray()
+		for i in range(compListFn.length()):
+			comp = compListFn[i]
+			if comp.apiType() == OpenMaya.MFn.kMeshVertComponent:
+				vtxComp = OpenMaya.MFnSingleIndexedComponent(comp)
+				for j in range(vtxComp.elementCount()):
+					vtxId = vtxComp.element(j)
+					vtxIds.append(vtxId)
+					
+		meshFn = OpenMaya.MFnMesh( self._getMeshNode() )
+		points = OpenMaya.MPointArray()
+		meshFn.getPoints( points, OpenMaya.MSpace.kObject )
+		
+		
+		if( points.length() > 0 ):
+
+			v0, n0, t, localCoordMat, localCoordMatInv = CircularizeVtxFactory.getInitialCoordAndMatrix( vtxIds, points, n )
+			#sort by center angle, compute avg radius
+			vs, radius = CircularizeVtxFactory.getSortedVtxIdsAndAngle( vtxIds, pv, points, localCoordMat )
+
+			accN = OpenMaya.MVector()
+			for i in range( len( vs ) ):
+				e0 = OpenMaya.MVector( points[ vs[i][0] ] - pv )
+				e1 = OpenMaya.MVector( points[ vs[ ( i + 1 ) % len( vs ) ][0] ] - pv )
+				w = ( e0 ^ e1 ).length()
+				e0.normalize()
+				e1.normalize()
+				n1 = e0 ^ e1
+				n1.normalize()
+				n1 = n1 * w
+				accN += n1
+
+			accN.normalize()
+			n = accN
+			
 		depNodeFn.findPlug('pivotPosX').setDouble( c[0] )
 		depNodeFn.findPlug('pivotPosY').setDouble( c[1] )
 		depNodeFn.findPlug('pivotPosZ').setDouble( c[2] )
@@ -860,7 +1052,7 @@ def cmdCreator():
 
 #-----------------------------------------------
 def initializePlugin(mobject):
-	mplugin = OpenMayaMPx.MFnPlugin(mobject, 'Mirage', '2016_1.1', 'Any')
+	mplugin = OpenMayaMPx.MFnPlugin(mobject, 'Mirage', '2016.1.2', 'Any')
 	try:
 		mplugin.registerCommand(kCircularizeVtxCmdName, cmdCreator)
 	except:
