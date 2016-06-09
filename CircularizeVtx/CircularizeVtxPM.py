@@ -1,3 +1,16 @@
+# -*- coding: utf-8 -*-
+
+'''
+This software contains copyrighted code owned by Autodesk, Inc. but has been modified and is not endorsed by Autodesk, Inc.
+See detail 
+AUTODESK LICENSE AND SERVICES AGREEMENT.
+https://github.com/autodesk-adn/Maya-devkit/blob/master/Autodesk%20EULA.pdf
+
+Copyright (c) 2016, yasutoshi Mori All rights reserved.
+'''
+
+
+
 #-
 # ==========================================================================
 # Copyright (C) 1995 - 2006 Autodesk, Inc. and/or its licensors.  All
