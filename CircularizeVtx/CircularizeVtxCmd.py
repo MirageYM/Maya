@@ -7,6 +7,7 @@ import collections
 from maya.OpenMaya import *
 import maya.OpenMayaMPx as OpenMayaMPx
 import maya.OpenMayaUI as OpenMayaUI
+import maya.cmds
 
 import CircularizeVtxPM as PolyModifier
 reload( PolyModifier )
@@ -472,7 +473,7 @@ class CircularizeVtxFactory(PolyModifier.polyModifierFty):
 	
 	#-----------------------------------------------
 	@staticmethod
-	def getVertexTopolygySortedList( vtxIds, pv, points, localCoordMat, mesh ):
+	def getVertexTopologySortedList( vtxIds, pv, points, localCoordMat, mesh ):
 
 		fnMesh = MFnMesh( mesh )
 		
@@ -534,7 +535,7 @@ class CircularizeVtxFactory(PolyModifier.polyModifierFty):
 		accRadius = 0.0
 		vs = []
 		
-		topoSortedList = CircularizeVtxFactory.getVertexTopolygySortedList( vtxIds, pv, points, localCoordMat, mesh )
+		topoSortedList = CircularizeVtxFactory.getVertexTopologySortedList( vtxIds, pv, points, localCoordMat, mesh )
 		#topoSortedList = None
 
 		if( topoSortedList is not None ):
@@ -1080,6 +1081,8 @@ class CircularizeVtx(PolyModifier.polyModifierCmd):
 
 		self.selDagPath = None
 		self.selComp = None
+		self.userSpecPV = None
+		self.userSpecN = None
 
 	#-----------------------------------------------
 	def isUndoable(self):
@@ -1088,6 +1091,27 @@ class CircularizeVtx(PolyModifier.polyModifierCmd):
 	#-----------------------------------------------
 	def doIt(self, args):
 		
+		argDB = MArgDatabase ( self.syntax(), args )
+
+		if( argDB.isFlagSet( 't' ) ):
+			s = argDB.flagArgumentString( 't', 0 )
+			
+			maya.cmds.select( s.split( ' ' ), r = True )
+			
+		if( argDB.isFlagSet( 'p' ) ):
+			p = []
+			p.append( argDB.flagArgumentDouble( 'p', 0 ) )
+			p.append( argDB.flagArgumentDouble( 'p', 1 ) )
+			p.append( argDB.flagArgumentDouble( 'p', 2 ) )
+			self.userSpecPV = p
+
+		if( argDB.isFlagSet( 'n' ) ):
+			p = []
+			p.append( argDB.flagArgumentDouble( 'n', 0 ) )
+			p.append( argDB.flagArgumentDouble( 'n', 1 ) )
+			p.append( argDB.flagArgumentDouble( 'n', 2 ) )
+			self.userSpecN = p
+			
 		selList = MSelectionList()
 		MGlobal.getActiveSelectionList(selList)
 		selListIter = MItSelectionList(selList)
@@ -1173,7 +1197,7 @@ class CircularizeVtx(PolyModifier.polyModifierCmd):
 				else:
 					MGlobal.select( self.selDagPath, self.selComp, MGlobal.kReplaceList )
 					MGlobal.executeCommandOnIdle( 'select -add ' + self._getModifierNodeName() + ';ShowManipulators();' )
-					self.setResult('CircularizeVtx command succeeded!')
+					self.setResult( self._getModifierNodeName() )
 			else:
 				self.displayError('CircularizeVtx command failed' )
 		else:
@@ -1184,7 +1208,7 @@ class CircularizeVtx(PolyModifier.polyModifierCmd):
 		try:
 			self._redoModifyPoly()
 			MGlobal.executeCommandOnIdle( 'select -r ' + self._getModifierNodeName() + '; ShowManipulators();' )
-			self.setResult('CircularizeVtx command succeeded!')
+			self.setResult( self._getModifierNodeName() )
 		except:
 			self.displayError('CircularizeVtx command failed!')
 			raise
@@ -1276,13 +1300,24 @@ class CircularizeVtx(PolyModifier.polyModifierCmd):
 
 			accN.normalize()
 			n = accN
+
+		if( self.userSpecPV and len( self.userSpecPV ) == 3 ):
+			depNodeFn.findPlug('pivotPosX').setDouble( self.userSpecPV[0] )
+			depNodeFn.findPlug('pivotPosY').setDouble( self.userSpecPV[1] )
+			depNodeFn.findPlug('pivotPosZ').setDouble( self.userSpecPV[2] )
+		else:
+			depNodeFn.findPlug('pivotPosX').setDouble( c[0] )
+			depNodeFn.findPlug('pivotPosY').setDouble( c[1] )
+			depNodeFn.findPlug('pivotPosZ').setDouble( c[2] )
 			
-		depNodeFn.findPlug('pivotPosX').setDouble( c[0] )
-		depNodeFn.findPlug('pivotPosY').setDouble( c[1] )
-		depNodeFn.findPlug('pivotPosZ').setDouble( c[2] )
-		depNodeFn.findPlug('normalVecX').setDouble( n[0] )
-		depNodeFn.findPlug('normalVecY').setDouble( n[1] )
-		depNodeFn.findPlug('normalVecZ').setDouble( n[2] )
+		if( self.userSpecN and len( self.userSpecN ) == 3 ):
+			depNodeFn.findPlug('normalVecX').setDouble( self.userSpecN[0] )
+			depNodeFn.findPlug('normalVecY').setDouble( self.userSpecN[1] )
+			depNodeFn.findPlug('normalVecZ').setDouble( self.userSpecN[2] )
+		else:
+			depNodeFn.findPlug('normalVecX').setDouble( n[0] )
+			depNodeFn.findPlug('normalVecY').setDouble( n[1] )
+			depNodeFn.findPlug('normalVecZ').setDouble( n[2] )
 
 	#-----------------------------------------------
 	def _directModifier(self, mesh):
@@ -1317,10 +1352,18 @@ def cmdCreator():
 	return OpenMayaMPx.asMPxPtr(CircularizeVtx())
 
 #-----------------------------------------------
+def syntaxCreator():
+	syntax = MSyntax()
+	syntax.addFlag( 't', 'target', MSyntax.kString )
+	syntax.addFlag( 'p', 'pivot', MSyntax.kDouble, MSyntax.kDouble, MSyntax.kDouble )
+	syntax.addFlag( 'n', 'normal', MSyntax.kDouble, MSyntax.kDouble, MSyntax.kDouble )
+	return syntax
+
+#-----------------------------------------------
 def initializePlugin(mobject):
-	mplugin = OpenMayaMPx.MFnPlugin(mobject, 'Mirage', '2016.1.2', 'Any')
+	mplugin = OpenMayaMPx.MFnPlugin(mobject, 'Mirage', '2016.1.3', 'Any')
 	try:
-		mplugin.registerCommand(kCircularizeVtxCmdName, cmdCreator)
+		mplugin.registerCommand( kCircularizeVtxCmdName, cmdCreator, syntaxCreator )
 	except:
 		sys.stderr.write( 'Failed to register command: %s\n' % kCircularizeVtxCmdName)
 		raise
