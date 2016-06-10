@@ -46,8 +46,8 @@ kCircularizeVtxCmdName = 'CircularizeVtxCmd'
 kCircularizeVtxNodeName = 'CircularizeVtxNode'
 kCircularizeVtxNodeManipName = 'CircularizeVtxNodeManip'
 
-kCircularizeVtxNodeId = MTypeId(0xb5b250)
-kCircularizeVtxNodeManipId = MTypeId(0xb5b251)
+kCircularizeVtxNodeId = MTypeId(0x00126ec0)
+kCircularizeVtxNodeManipId = MTypeId(0x00126ec1)
 
 #-----------------------------------------------
 def statusError(message):
