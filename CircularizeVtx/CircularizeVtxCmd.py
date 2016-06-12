@@ -114,31 +114,34 @@ def getPlaneNormal( points, checkNormal = False ):
 			beta = -apq
 			gamma = abs( alpha ) / math.sqrt( alpha * alpha + beta * beta )
 
-			s = math.sqrt( ( 1.0 - gamma ) / 2.0 )
-			c = math.sqrt( ( 1.0 + gamma ) / 2.0 )
+			sinVal = math.sqrt( ( 1.0 - gamma ) / 2.0 )
+			cosVal = math.sqrt( ( 1.0 + gamma ) / 2.0 )
 			if( alpha * beta < 0.0 ):
-				s = -s
+				sinVal = -sinVal
+			sin2Val = sinVal * sinVal
+			cos2Val = cosVal * cosVal
+			sinCosVal = sinVal * cosVal
 
 			for i in xrange( 3 ):
-				temp = c * mat[p][i] - s * mat[q][i]
-				mat[q][i] = s * mat[p][i] + c * mat[q][i]
+				temp = cosVal * mat[p][i] - sinVal * mat[q][i]
+				mat[q][i] = sinVal * mat[p][i] + cosVal * mat[q][i]
 				mat[p][i] = temp
 				
 			for i in xrange( 3 ):
 				mat[i][p] = mat[p][i]
 				mat[i][q] = mat[q][i]
 
-			mat[p][p] = c * c * app + s * s * aqq - 2.0 * s * c * apq
-			mat[p][q] = s * c * ( app - aqq ) + ( c * c - s * s ) * apq
+			mat[p][p] = cos2Val * app + sin2Val * aqq - 2.0 * sinCosVal * apq
+			mat[p][q] = sinCosVal * ( app - aqq ) + ( cos2Val - sin2Val ) * apq
 			mat[q][p] = mat[p][q]
-			mat[q][q] = s * s * app + c * c * aqq + 2.0 * s * c * apq
+			mat[q][q] = sin2Val * app + cos2Val * aqq + 2.0 * sinCosVal * apq
 
 			for i in xrange( 3 ):
-				temp = c * retVecMat[i][p] - s * retVecMat[i][q]
-				retVecMat[i][q] = s * retVecMat[i][p] + c * retVecMat[i][q]
+				temp = cosVal * retVecMat[i][p] - sinVal * retVecMat[i][q]
+				retVecMat[i][q] = sinVal * retVecMat[i][p] + cosVal * retVecMat[i][q]
 				retVecMat[i][p] = temp
 
-		return retVecMat
+		return mat, retVecMat
 	#- - - - -
 
 
@@ -169,38 +172,26 @@ def getPlaneNormal( points, checkNormal = False ):
 		for j in xrange( 3 ):
 			covarianceMat[i][j] /= len( points )
 
-	diagMat = getDiagonalizeMat( covarianceMat )
+	diagMat, eigenVecs = getDiagonalizeMat( covarianceMat )
 
-	"""
-	for i in range(3):
-		print diagMat[i]
-	"""
+	eigenVecArray = [ ( diagMat[0][0], MVector( eigenVecs[0][0], eigenVecs[1][0], eigenVecs[2][0] ) ),
+				  ( diagMat[1][1], MVector( eigenVecs[0][1], eigenVecs[1][1], eigenVecs[2][1] ) ),
+				  ( diagMat[2][2], MVector( eigenVecs[0][2], eigenVecs[1][2], eigenVecs[2][2] ) ) ]
+	eigenVecArray.sort( key = lambda x:x[0], reverse = False )
+	normal = eigenVecArray[0][1]
 
 	if( not checkNormal ):
-		eigenVecs = [ ( diagMat[0][0], MVector( diagMat[0][0], diagMat[1][0], diagMat[2][0] ) ),
-					  ( diagMat[1][1], MVector( diagMat[0][1], diagMat[1][1], diagMat[2][1] ) ),
-					  ( diagMat[2][2], MVector( diagMat[0][2], diagMat[1][2], diagMat[2][2] ) ) ]
-		eigenVecs.sort( key = lambda x:x[0], reverse = False )
-		return eigenVecs[0][1]
+		return normal
 
 	tempE0 = MVector( points[0] ) - center
 	tempE1 = MVector( points[1] ) - center
 	tempE0.normalize()
 	tempE1.normalize()
 	tempN = tempE0 ^ tempE1
+	if( normal * tempN < 0.0 ):
+		normal *= -1.0
 
-	dots = [ abs( v[1] * tempN ) for v in eigenVecs ]
-	if( dots[2] > dots[1] and dots[2] > dots[0] ):
-		if( eigenVecs[2][1] * tempN < 0.0 ):
-			eigenVecs[2][1] *= -1.0
-		return eigenVecs[2][1]
-	elif( dots[1] > dots[0] and dots[1] > dots[2] ):
-		if( eigenVecs[1][1] * tempN < 0.0 ):
-			eigenVecs[1][1] *= -1.0
-		return eigenVecs[1][1]
-	if( eigenVecs[0][1] * tempN < 0.0 ):
-		eigenVecs[0][1] *= -1.0
-	return eigenVecs[0][1]
+	return normal
 
 #=========================================
 #CircularizeVtxNodeManip
@@ -1463,7 +1454,7 @@ class CircularizeVtx(PolyModifier.polyModifierCmd):
 			raise
 
 	#-----------------------------------------------
-	def _initModifierNode(self, modifierNode):
+	def __initModifierNode(self, modifierNode):
 		depNodeFn = MFnDependencyNode(modifierNode)
 		compListAttr = depNodeFn.attribute('inputComponents')
 		
@@ -1508,17 +1499,14 @@ class CircularizeVtx(PolyModifier.polyModifierCmd):
 		else:
 			n.normalize()
 
-		"""
+
 		points = []
 		itrVtx.reset()
 		while( not itrVtx.isDone() ):
 			p = itrVtx.position( MSpace.kObject )
 			points.append( p )
 			itrVtx.next()
-
-		n2 = getPlaneNormal( points )
-		"""
-
+			
 		#make avg normal
 		itrVtx.reset()
 		vtxIds = MIntArray()
@@ -1550,10 +1538,6 @@ class CircularizeVtx(PolyModifier.polyModifierCmd):
 
 			accN.normalize()
 			n = accN
-		"""
-		print '%f %f %f' % ( n.x, n.y, n.z )
-		print '%f %f %f' % ( n2.x, n2.y, n2.z )
-		"""
 
 		if( self.initRadMode == 1 ):
 			depNodeFn.findPlug('radius').setDouble( minRad )
@@ -1585,7 +1569,7 @@ class CircularizeVtx(PolyModifier.polyModifierCmd):
 			depNodeFn.findPlug('normalVecZ').setDouble( n[2] )
 			
 	#-----------------------------------------------
-	def __initModifierNode(self, modifierNode):
+	def _initModifierNode(self, modifierNode):
 		depNodeFn = MFnDependencyNode(modifierNode)
 		compListAttr = depNodeFn.attribute('inputComponents')
 		
