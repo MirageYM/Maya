@@ -1,0 +1,54 @@
+/*
+AECircularizeVtxNodeTemplate
+
+Original File By UnitBus
+http://unitbus.dtdns.net/
+(Thank you UnitBus!)
+
+Modified By Yasutoshi Mori
+
+*/
+
+global proc AECircularizeVtxNodeTemplate ( string $nodeName )
+{
+	AEswatchDisplay $nodeName;
+	editorTemplate -beginScrollLayout;
+		editorTemplate -beginLayout "Attribute" -collapse 0;
+			editorTemplate -beginLayout "Pivot" -collapse 0;
+				editorTemplate -addControl "pivotPos";
+				editorTemplate -addControl "normalVec";
+			editorTemplate -endLayout;
+			
+			editorTemplate -beginLayout "Control" -collapse 0;
+				editorTemplate -addControl "rot";
+				editorTemplate -addControl "weight";
+				editorTemplate -addControl "offset";
+				editorTemplate -addControl "radius";
+				editorTemplate -addControl "radiusScale";
+				AEaddRampControl( $nodeName + ".profileRamp" );
+				
+			editorTemplate -endLayout;
+			
+			editorTemplate -beginLayout "Mode" -collapse 0;
+				editorTemplate -addControl "phaseMode";
+				editorTemplate -addControl "normalMode";
+				editorTemplate -addControl "rayMode";
+			editorTemplate -endLayout;
+		editorTemplate -endLayout;
+
+		editorTemplate -beginLayout "Input" -collapse 1;
+			editorTemplate -addControl "inputComponents";
+			editorTemplate -addControl "inMesh";
+		editorTemplate -endLayout;
+		
+		editorTemplate -beginLayout "Matrix" -collapse 1;
+			editorTemplate -addControl "worldMatrix";
+			editorTemplate -addControl "worldInverseMatrix";
+		editorTemplate -endLayout;
+
+	// include/call base class/node attributes
+	AEdependNodeTemplate $nodeName;
+
+	editorTemplate -addExtraControls;
+	editorTemplate -endScrollLayout;
+}

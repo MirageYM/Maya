@@ -34,6 +34,7 @@ import sys
 import math
 import collections
 
+import maya.OpenMaya as OpenMaya
 from maya.OpenMaya import *
 import maya.OpenMayaMPx as OpenMayaMPx
 import maya.OpenMayaUI as OpenMayaUI
@@ -65,15 +66,44 @@ def MIntArrayToSet( intArray ):
 	return set( MIntArrayToList( intArray ) )
 
 #-----------------------------------------------
-def DebugDumpMat( mat ):
-	m = []
+def DebugPrintMat( mat, prefixStr = '', suffixStr = '' ):
+
+	print prefixStr
 	for i in xrange( 4 ):
+		m = []
 		for j in xrange( 4 ):
 			m.append( mat( i, j ) )
-	print m
+		print m
+	print suffixStr
+#-----------------------------------------------
+def DebugPrintVec( vec, prefixStr = '', suffixStr = '' ):
+	print '%s %f %f %f %s' % ( prefixStr, vec.x, vec.y, vec.z, suffixStr )
 
 #-----------------------------------------------
-def getPlaneNormal( points, checkNormal = False ):
+def createSystemMat( v0, n0, t, pv ):
+	mUtil = MScriptUtil()
+	m = [ 1.0, 0.0, 0.0, 0.0,
+		  0.0, 1.0, 0.0, 0.0,
+		  0.0, 0.0, 1.0, 0.0,
+		  -pv.x, -pv.y, -pv.z, 1.0 ]
+
+	mat0 = MMatrix()
+	mUtil.createMatrixFromList( m, mat0 )
+	
+	m = [ v0.x, n0.x, t.x, 0.0,
+		  v0.y, n0.y, t.y, 0.0,
+		  v0.z, n0.z, t.z, 0.0,
+		  0.0, 0.0, 0.0, 1.0 ]
+
+	mat1 = MMatrix()
+	mUtil.createMatrixFromList( m, mat1 )
+	mat = mat0 * mat1
+	matInv = mat.inverse()
+
+	return ( mat, matInv )
+	
+#-----------------------------------------------
+def getPcaAxis( points, checkNormal = False ):
 
 	#-----------------------------------------------
 	def getDiagonalizeMat( mat ):
@@ -178,20 +208,17 @@ def getPlaneNormal( points, checkNormal = False ):
 				  ( diagMat[1][1], MVector( eigenVecs[0][1], eigenVecs[1][1], eigenVecs[2][1] ) ),
 				  ( diagMat[2][2], MVector( eigenVecs[0][2], eigenVecs[1][2], eigenVecs[2][2] ) ) ]
 	eigenVecArray.sort( key = lambda x:x[0], reverse = False )
-	normal = eigenVecArray[0][1]
 
-	if( not checkNormal ):
-		return normal
+	if( checkNormal ):
+		tempE0 = MVector( points[0] ) - center
+		tempE1 = MVector( points[1] ) - center
+		tempE0.normalize()
+		tempE1.normalize()
+		tempN = tempE0 ^ tempE1
+		if( eigenVecArray[0][1] * tempN < 0.0 ):
+			eigenVecArray[0][1] *= -1.0
 
-	tempE0 = MVector( points[0] ) - center
-	tempE1 = MVector( points[1] ) - center
-	tempE0.normalize()
-	tempE1.normalize()
-	tempN = tempE0 ^ tempE1
-	if( normal * tempN < 0.0 ):
-		normal *= -1.0
-
-	return normal
+	return ( eigenVecArray[2][1], eigenVecArray[1][1], eigenVecArray[0][1], center )
 
 #=========================================
 #CircularizeVtxNodeManip
@@ -588,10 +615,11 @@ class CircularizeVtxFactory(PolyModifier.polyModifierFty):
 		self.radiusScale = 1.0
 		self.normalMode = 0
 		self.initialN = MVector()
+		self.initialP = MVector()
 		self.normalVec = MVector()
 		self.useRay = 0
 		self.nOffset = 0.0
-
+		self.profileRamp = None
 		
 	#-----------------------------------------------
 	def doIt(self):
@@ -605,51 +633,26 @@ class CircularizeVtxFactory(PolyModifier.polyModifierFty):
 
 	#-----------------------------------------------
 	@staticmethod
-	def getInitialCoordAndMatrix( vtxIds, points, pv, normalVec, initialN = None ):
+	def getInitialCoordAndMatrix( vtxIds, points, pv, normalVec ):
 		#compute initial coordinate system v0-n0-t
 		mUtil = MScriptUtil()
-		
+
 		n0 = normalVec
 		"""
-		if( initialN ):
-			if( initialN * n0 < 0.0 ):
-				n0 = -n0
-		else:
-			e0 = points[vtxIds[1]] - points[vtxIds[0]]
-			e1 = points[vtxIds[2]] - points[vtxIds[0]]
-			if(  ( e0 ^ e1 ) * n0 < 0.0 ):
-				n0 = -n0
-		"""
-
 		v0 = points[vtxIds[1]] - points[vtxIds[0]]
 		v0.normalize()
-		if( v0 * n0 > 0.9999999 ):
+		"""
+		v0 = MVector( 0.0, 1.0, 0.0 )
+
+		if( v0 * n0 > 0.999999 ):
 			v0 = MVector( 1.0, 0.0, 0.0 )
 			
 		t = n0 ^ v0
 		t.normalize()
-		v0 = n0 ^ t
+		v0 = t ^ n0
 		v0.normalize()
 
-		m = [ 1.0, 0.0, 0.0, 0.0,
-			  0.0, 1.0, 0.0, 0.0,
-			  0.0, 0.0, 1.0, 0.0,
-			  -pv.x, -pv.y, -pv.z, 1.0 ]
-
-		mat0 = MMatrix()
-		mUtil.createMatrixFromList( m, mat0 )
-		
-		m = [ v0.x, n0.x, t.x, 0.0,
-			  v0.y, n0.y, t.y, 0.0,
-			  v0.z, n0.z, t.z, 0.0,
-			  0.0, 0.0, 0.0, 1.0 ]
-
-		mat1 = MMatrix()
-		mUtil.createMatrixFromList( m, mat1 )
-		
-		localCoordMat = mat0 * mat1
-		localCoordMatInv = localCoordMat.inverse()
-
+		localCoordMat, localCoordMatInv = createSystemMat( v0, n0, t, pv )
 		return ( v0, n0, t, localCoordMat, localCoordMatInv )
 	
 	#-----------------------------------------------
@@ -710,6 +713,24 @@ class CircularizeVtxFactory(PolyModifier.polyModifierFty):
 	
 	#-----------------------------------------------
 	@staticmethod
+	def getAngle( v, localCoordMat ):
+		vl = MVector( v * localCoordMat )
+		vl.y = 0.0
+		vl.normalize()
+
+		d = vl.x
+		a = math.acos( min( 1.0, max( d, -1.0 ) ) )
+		
+		if( vl.z < 0.0 ):
+			a = math.pi * 2.0 - a
+
+		while( a < 0.0 ):
+			a += math.pi * 2.0
+
+		return a
+	
+	#-----------------------------------------------
+	@staticmethod
 	def getSortedVtxIdsAndAngle( vtxIds, pv, points, localCoordMat, mesh, n0 = None ):
 
 		selVtxCount = vtxIds.length()
@@ -730,22 +751,6 @@ class CircularizeVtxFactory(PolyModifier.polyModifierFty):
 		pv0.z /= selVtxCount
 		pv0 = MPoint( pv0 )
 
-		def getAngle( v, localCoordMat ):
-			vl = MVector( v * localCoordMat )
-			vl.y = 0.0
-			vl.normalize()
-
-			d = vl.x
-			a = math.acos( min( 1.0, max( d, -1.0 ) ) )
-			
-			if( vl.z < 0.0 ):
-				a = math.pi * 2.0 - a
-
-			while( a < 0.0 ):
-				a += math.pi * 2.0
-
-			return a
-
 		if( topoSortedList is not None ):
 
 			if( n0 ):
@@ -760,7 +765,7 @@ class CircularizeVtxFactory(PolyModifier.polyModifierFty):
 				accRadius += l
 				minRadius = min( minRadius, l )
 				maxRadius = max( maxRadius, l )
-				vs.append( ( i, getAngle( v, localCoordMat ) ) )
+				vs.append( ( i, CircularizeVtxFactory.getAngle( v, localCoordMat ) ) )
 
 			minIndex = 0
 			minAngle = 100.0
@@ -782,17 +787,9 @@ class CircularizeVtxFactory(PolyModifier.polyModifierFty):
 				accRadius += l
 				minRadius = min( minRadius, l )
 				maxRadius = max( maxRadius, l )
-				vs.append( ( vtxIds[i], getAngle( v, localCoordMat ) ) )
+				vs.append( ( vtxIds[i], CircularizeVtxFactory.getAngle( v, localCoordMat ) ) )
 				
 			vs.sort( key = lambda x: x[1], reverse = False )
-			
-			"""
-			if( n0 ):
-				v0 = MVector( points[ vs[0] ] - pv )
-				v1 = MVector( points[ vs[1] ] - pv )
-				if( ( v0 ^ v1 ) * n0 > 0.0 ):
-					vs.reverse()
-			"""
 		
 		accRadius /= selVtxCount
 		return ( vs, accRadius, minRadius, maxRadius )
@@ -842,8 +839,7 @@ class CircularizeVtxFactory(PolyModifier.polyModifierFty):
 		fnMesh = MFnMesh( self.mesh )
 		selVtxCount = self.vtxIds.length()
 		self.normalVec.normalize()
-		
-		#pv = MPoint( self.pivot ) * self.wimat
+
 		pv = MPoint( self.pivot )
 		radius = self.radius
 		radius *= self.radiusScale
@@ -857,15 +853,24 @@ class CircularizeVtxFactory(PolyModifier.polyModifierFty):
 			return
 
 		da = ( math.pi * 2.0 ) / selVtxCount
-			
+
 		#compute initial coordinate system v0-n0-t
-		v0, n0, t, localCoordMat, localCoordMatInv = CircularizeVtxFactory.getInitialCoordAndMatrix( self.vtxIds, points, pv, self.initialN, self.normalVec )
-		v1, n1, t, projMat, projMatInv = CircularizeVtxFactory.getInitialCoordAndMatrix( self.vtxIds, points, pv, self.normalVec )
-		localCoordMat = projMat
-		localCoordMatInv = projMatInv
+		v0, n0, t, localCoordMat, localCoordMatInv = CircularizeVtxFactory.getInitialCoordAndMatrix( self.vtxIds, points, self.initialP, self.initialN )
+		nl = self.normalVec * localCoordMat
+		rotMat = nl.rotateTo( MVector( 0.0, 1.0, 0.0 ) ).asMatrix()
+		m = [ 1.0, 0.0, 0.0, 0.0,
+			  0.0, 1.0, 0.0, 0.0,
+			  0.0, 0.0, 1.0, 0.0,
+			  -pv.x + self.initialP.x, -pv.y + self.initialP.y, -pv.z + self.initialP.z, 1.0 ]
+		trsMat = MMatrix()
+		mUtil.createMatrixFromList( m, trsMat )
+		
+		projMat = trsMat * localCoordMat * rotMat
+		#projMat = localCoordMat
+		projMatInv = projMat.inverse()
 		
 		#sort by center angle, compute avg radius
-		vs, avgRadius, minRadius, maxRadius = CircularizeVtxFactory.getSortedVtxIdsAndAngle( self.vtxIds, pv, points, localCoordMat, self.mesh, self.initialN )
+		vs, avgRadius, minRadius, maxRadius = CircularizeVtxFactory.getSortedVtxIdsAndAngle( self.vtxIds, self.initialP, points, localCoordMat, self.mesh, self.initialN )
 		accParams = fnMesh.autoUniformGridParams()
 
 		avgAngleDelta = 0.0
@@ -876,17 +881,23 @@ class CircularizeVtxFactory(PolyModifier.polyModifierFty):
 		avgAngleDelta /= len( vs )
 
 		orgToCirurizePos = []
+		rampVal = mUtil.asFloatPtr()
 		
 		for i, elem in enumerate( vs ):
 			params = []
 			idx = elem[0]
 			a = da * i
 			a += self.rot
-			a = -a + avgAngleDelta
+			a = a + avgAngleDelta
 			
 			dSin = math.sin( a )
 			dCos = math.cos( a )
-			v = MPoint( dCos * radius, 0.0, -dSin * radius, 1.0 )
+			mUtil.createFromDouble( 0.0 )
+
+			self.profileRamp.getValueAtPosition( float(i) / float(len( vs ) ), rampVal )
+			radScale = radius * mUtil.getFloat( rampVal )
+			
+			v = MPoint( dCos * radScale, 0.0, -dSin * radScale, 1.0 )
 			lv = points[idx] * projMat
 			lv.y = 0.0
 			elv = v - lv
@@ -911,12 +922,32 @@ class CircularizeVtxFactory(PolyModifier.polyModifierFty):
 		if( self.innerVtxIds.length() > 0 ):
 
 			fscale = self.radiusScale * ( radius / maxRadius )
+			dSin = math.sin( self.rot )
+			dCos = math.cos( self.rot )
+			m = [ dCos, 0.0, -dSin, 0.0,
+				  0.0, 1.0, 0.0, 0.0,
+				  dSin, 0.0, dCos, 0.0,
+				  0.0, 0.0, 0.0, 1.0 ]
+			nRotMat = MMatrix()
+			mUtil.createMatrixFromList( m, nRotMat )
+
+			innerProjMat = trsMat * localCoordMat * rotMat * nRotMat
+			innerProjMatInv = innerProjMat.inverse()
+			innerProjMat = projMat
+			innerProjMatInv = projMatInv
+
 				
 			for i in xrange( self.innerVtxIds.length() ):
 				idx = self.innerVtxIds[i]
 				org = points[ idx ]
-				p2 = org * projMat
+				angle = CircularizeVtxFactory.getAngle( org, localCoordMat )
+				self.profileRamp.getValueAtPosition( 1.0 - ( angle / ( math.pi * 2.0 ) ), rampVal )
+				
+				radScale = fscale * mUtil.getFloat( rampVal )
+				
+				p2 = org * innerProjMat
 				p2.y = 0.0
+				p2 = p2 * nRotMat
 				
 				accLen = 0.0
 				lens = []
@@ -935,9 +966,10 @@ class CircularizeVtxFactory(PolyModifier.polyModifierFty):
 				for item, weight in zip( orgToCirurizePos, w ):
 					p2 = p2 + item[1] * ( weight / wt )
 
-				p2.x *= fscale
-				p2.z *= fscale
-				p4 = MVector( MPoint( p2 ) * projMatInv )
+				p2.x *= radScale
+				p2.z *= radScale
+				
+				p4 = MVector( MPoint( p2 ) * innerProjMatInv )
 				p5 = org * ( 1.0 - self.weight ) + p4 * self.weight
 				
 				if( self.useRay ):
@@ -976,6 +1008,11 @@ class CircularizeVtxNode(PolyModifier.polyModifierNode):
 	initialNY = MObject()
 	initialNZ = MObject()
 	
+	initialP = MObject()
+	initialPX = MObject()
+	initialPY = MObject()
+	initialPZ = MObject()
+	
 	rot = MObject()
 	nOffset = MObject()
 
@@ -989,6 +1026,8 @@ class CircularizeVtxNode(PolyModifier.polyModifierNode):
 	phaseMode = MObject()
 	normalMode = MObject()
 	rayMode = MObject()
+
+	profileRamp = MObject()
 
 	#-----------------------------------------------
 	def __init__(self):
@@ -1053,6 +1092,7 @@ class CircularizeVtxNode(PolyModifier.polyModifierNode):
 					pivotData = data.inputValue( CircularizeVtxNode.pivotPos )
 					normalVecData = data.inputValue( CircularizeVtxNode.normalVec )
 					initialNData = data.inputValue( CircularizeVtxNode.initialN )
+					initialPData = data.inputValue( CircularizeVtxNode.initialP )
 					wmatData = data.inputValue( CircularizeVtxNode.worldMatrix )
 					wimatData = data.inputValue( CircularizeVtxNode.worldInverseMatrix )
 					wtData = data.inputValue( CircularizeVtxNode.weight )
@@ -1080,6 +1120,7 @@ class CircularizeVtxNode(PolyModifier.polyModifierNode):
 				self.fCircularizeVtxFactory.nOffset = nOffsetData.asDouble()
 				self.fCircularizeVtxFactory.useRay = rayModeData.asInt()
 				self.fCircularizeVtxFactory.initialN = initialNData.asVector()
+				self.fCircularizeVtxFactory.initialP = initialPData.asVector()
 
 				compList = inputComp.data()
 				compListFn = MFnComponentListData(compList)
@@ -1107,6 +1148,8 @@ class CircularizeVtxNode(PolyModifier.polyModifierNode):
 				self.fCircularizeVtxFactory.mesh = mesh
 				self.fCircularizeVtxFactory.vtxIds = vtxIds
 				self.fCircularizeVtxFactory.innerVtxIds = innerIds
+
+				self.fCircularizeVtxFactory.profileRamp = MRampAttribute( MPlug( self.thisMObject(), CircularizeVtxNode.profileRamp ) )
 
 				# Now, perform the CircularizeVtx
 				#
@@ -1186,12 +1229,13 @@ class CircularizeVtxNode(PolyModifier.polyModifierNode):
 		setNumAttrDefault( numAttrFn )
 		CircularizeVtxNode.addAttribute(CircularizeVtxNode.normalVec)
 		
+		#initial N
 		CircularizeVtxNode.initialNX = numAttrFn.create( 'initialNX', 'inx', MFnNumericData.kDouble, 0.0 )
 		setNumAttrDefault( numAttrFn )
 		numAttrFn.setChannelBox( False )
 		numAttrFn.setHidden( True )
 		CircularizeVtxNode.addAttribute(CircularizeVtxNode.initialNX)
-		
+
 		CircularizeVtxNode.initialNY = numAttrFn.create( 'initialNY', 'iny', MFnNumericData.kDouble, 0.0 )
 		setNumAttrDefault( numAttrFn )
 		numAttrFn.setChannelBox( False )
@@ -1210,6 +1254,31 @@ class CircularizeVtxNode(PolyModifier.polyModifierNode):
 		numAttrFn.setHidden( True )
 		CircularizeVtxNode.addAttribute(CircularizeVtxNode.initialN)
 		
+		#initial P
+		CircularizeVtxNode.initialPX = numAttrFn.create( 'initialPX', 'ipx', MFnNumericData.kDouble, 0.0 )
+		setNumAttrDefault( numAttrFn )
+		numAttrFn.setChannelBox( False )
+		numAttrFn.setHidden( True )
+		CircularizeVtxNode.addAttribute(CircularizeVtxNode.initialPX)
+		
+		CircularizeVtxNode.initialPY = numAttrFn.create( 'initialPY', 'ipy', MFnNumericData.kDouble, 0.0 )
+		setNumAttrDefault( numAttrFn )
+		numAttrFn.setChannelBox( False )
+		numAttrFn.setHidden( True )
+		CircularizeVtxNode.addAttribute(CircularizeVtxNode.initialPY)
+		
+		CircularizeVtxNode.initialPZ = numAttrFn.create( 'initialPZ', 'ipz', MFnNumericData.kDouble, 0.0 )
+		setNumAttrDefault( numAttrFn )
+		numAttrFn.setChannelBox( False )
+		numAttrFn.setHidden( True )
+		CircularizeVtxNode.addAttribute(CircularizeVtxNode.initialPZ)
+
+		CircularizeVtxNode.initialP = numAttrFn.create( 'initialP', 'ipv', CircularizeVtxNode.initialPX, CircularizeVtxNode.initialPY, CircularizeVtxNode.initialPZ )
+		setNumAttrDefault( numAttrFn )
+		numAttrFn.setChannelBox( False )
+		numAttrFn.setHidden( True )
+		CircularizeVtxNode.addAttribute(CircularizeVtxNode.initialP)
+		
 		#rot
 		CircularizeVtxNode.rot = numAttrFn.create( 'rot', 'r', MFnNumericData.kDouble, 0.0 )
 		setNumAttrDefault( numAttrFn )
@@ -1220,11 +1289,13 @@ class CircularizeVtxNode(PolyModifier.polyModifierNode):
 		CircularizeVtxNode.worldMatrix = fnMatrix.create( 'worldMatrix', 'wm' )
 		fnMatrix.setStorable( False )
 		fnMatrix.setConnectable( True )
+		fnMatrix.setHidden( True )
 		CircularizeVtxNode.addAttribute( CircularizeVtxNode.worldMatrix )
 		
 		CircularizeVtxNode.worldInverseMatrix = fnMatrix.create( 'worldInverseMatrix', 'wim' )
 		fnMatrix.setStorable( False )
 		fnMatrix.setConnectable( True )
+		fnMatrix.setHidden( True )
 		CircularizeVtxNode.addAttribute( CircularizeVtxNode.worldInverseMatrix )
 
 		#weight
@@ -1255,6 +1326,11 @@ class CircularizeVtxNode(PolyModifier.polyModifierNode):
 		CircularizeVtxNode.rayMode = numAttrFn.create( 'rayMode', 'rm', MFnNumericData.kInt, 1 )
 		setNumAttrDefault( numAttrFn )
 		CircularizeVtxNode.addAttribute( CircularizeVtxNode.rayMode )
+
+		#ramp
+		CircularizeVtxNode.profileRamp = MRampAttribute.createCurveRamp( 'profileRamp', 'pr' )
+		CircularizeVtxNode.addAttribute( CircularizeVtxNode.profileRamp )
+		
 		
 		# Set up a dependency between the input and the output.  This will cause
 		# the output to be marked dirty when the input changes.  The output will
@@ -1284,6 +1360,11 @@ class CircularizeVtxNode(PolyModifier.polyModifierNode):
 		CircularizeVtxNode.attributeAffects(CircularizeVtxNode.initialNX, CircularizeVtxNode.outMesh)
 		CircularizeVtxNode.attributeAffects(CircularizeVtxNode.initialNY, CircularizeVtxNode.outMesh)
 		CircularizeVtxNode.attributeAffects(CircularizeVtxNode.initialNZ, CircularizeVtxNode.outMesh)
+		CircularizeVtxNode.attributeAffects(CircularizeVtxNode.initialP, CircularizeVtxNode.outMesh)
+		CircularizeVtxNode.attributeAffects(CircularizeVtxNode.initialPX, CircularizeVtxNode.outMesh)
+		CircularizeVtxNode.attributeAffects(CircularizeVtxNode.initialPY, CircularizeVtxNode.outMesh)
+		CircularizeVtxNode.attributeAffects(CircularizeVtxNode.initialPZ, CircularizeVtxNode.outMesh)
+		CircularizeVtxNode.attributeAffects(CircularizeVtxNode.profileRamp, CircularizeVtxNode.outMesh)
 		
 		OpenMayaMPx.MPxManipContainer.addToManipConnectTable(kCircularizeVtxNodeId)
 
@@ -1310,6 +1391,7 @@ class CircularizeVtx(PolyModifier.polyModifierCmd):
 		self.userSpecPV = None
 		self.userSpecN = None
 		self.initRadMode = 0
+		self.initRadius = None
 
 	#-----------------------------------------------
 	def isUndoable(self):
@@ -1339,8 +1421,11 @@ class CircularizeVtx(PolyModifier.polyModifierCmd):
 			p.append( argDB.flagArgumentDouble( 'n', 2 ) )
 			self.userSpecN = p
 			
+		if( argDB.isFlagSet( 'rm' ) ):
+			self.initRadMode = argDB.flagArgumentInt( 'rm', 0 )
+			
 		if( argDB.isFlagSet( 'r' ) ):
-			self.initRadMode = argDB.flagArgumentDouble( 'r', 0 )
+			self.initRadius = argDB.flagArgumentDouble( 'r', 0 )
 			
 		selList = MSelectionList()
 		MGlobal.getActiveSelectionList(selList)
@@ -1454,121 +1539,6 @@ class CircularizeVtx(PolyModifier.polyModifierCmd):
 			raise
 
 	#-----------------------------------------------
-	def __initModifierNode(self, modifierNode):
-		depNodeFn = MFnDependencyNode(modifierNode)
-		compListAttr = depNodeFn.attribute('inputComponents')
-		
-		compListPlug = MPlug(modifierNode, compListAttr)
-		compListPlug.setMObject(self.compList)
-
-		itrVtx = None
-		if self.selComp.apiType() == MFn.kMeshVertComponent:
-			itrVtx = MItMeshVertex( self._getMeshNode(), self.selComp )
-		elif self.selComp.apiType() == MFn.kMeshPolygonComponent:
-			ids = FaceCompToVertices().getPerimeter( self.selDagPath, self.selComp )
-			compFn = MFnSingleIndexedComponent()
-			component = compFn.create( MFn.kMeshVertComponent )
-			for i in ids:
-				compFn.addElement( i )
-			itrVtx = MItMeshVertex( self._getMeshNode(), component )
-		
-		if( itrVtx.count() <= 0 ):
-			return
-
-		#make tempolar normal
-		c = [0.0, 0.0, 0.0]
-		n = MVector()
-		while( not itrVtx.isDone() ):
-			p = itrVtx.position( MSpace.kObject )
-			vn = MVector()
-			itrVtx.getNormal( vn, MSpace.kObject )
-			c[0] = p[0] + c[0]
-			c[1] = p[1] + c[1]
-			c[2] = p[2] + c[2]
-			n = vn + n
-			itrVtx.next()
-			
-		c[0] = c[0] / itrVtx.count()
-		c[1] = c[1] / itrVtx.count()
-		c[2] = c[2] / itrVtx.count()
-		pv = MPoint( c[0], c[1], c[2] )
-		n = n / itrVtx.count()
-		if( n.length() == 0.0 ):
-			n = MVector( 1.0, 1.0, 1.0 )
-			n.normalize()
-		else:
-			n.normalize()
-
-
-		points = []
-		itrVtx.reset()
-		while( not itrVtx.isDone() ):
-			p = itrVtx.position( MSpace.kObject )
-			points.append( p )
-			itrVtx.next()
-			
-		#make avg normal
-		itrVtx.reset()
-		vtxIds = MIntArray()
-		while not itrVtx.isDone():
-			vtxIds.append( itrVtx.index() )
-			itrVtx.next()
-					
-		fnMesh = MFnMesh( self._getMeshNode() )
-		points = MPointArray()
-		fnMesh.getPoints( points, MSpace.kObject )
-
-		if( points.length() > 0 ):
-
-			v0, n0, t, localCoordMat, localCoordMatInv = CircularizeVtxFactory.getInitialCoordAndMatrix( vtxIds, points, pv, n )
-			#sort by center angle, compute avg radius
-			vs, avgRad, minRad, maxRad = CircularizeVtxFactory.getSortedVtxIdsAndAngle( vtxIds, pv, points, localCoordMat, self._getMeshNode() )
-
-			accN = MVector()
-			for i in range( len( vs ) ):
-				e0 = MVector( points[ vs[i][0] ] - pv )
-				e1 = MVector( points[ vs[ ( i + 1 ) % len( vs ) ][0] ] - pv )
-				w = ( e0 ^ e1 ).length()
-				e0.normalize()
-				e1.normalize()
-				n1 = e0 ^ e1
-				n1.normalize()
-				n1 = n1 * w
-				accN += n1
-
-			accN.normalize()
-			n = accN
-
-		if( self.initRadMode == 1 ):
-			depNodeFn.findPlug('radius').setDouble( minRad )
-		elif( self.initRadMode == 2 ):
-			depNodeFn.findPlug('radius').setDouble( maxRad )
-		else:
-			depNodeFn.findPlug('radius').setDouble( avgRad )
-
-		depNodeFn.findPlug('initialNX').setDouble( n[0] )
-		depNodeFn.findPlug('initialNY').setDouble( n[1] )
-		depNodeFn.findPlug('initialNZ').setDouble( n[2] )
-			
-		if( self.userSpecPV and len( self.userSpecPV ) == 3 ):
-			depNodeFn.findPlug('pivotPosX').setDouble( self.userSpecPV[0] )
-			depNodeFn.findPlug('pivotPosY').setDouble( self.userSpecPV[1] )
-			depNodeFn.findPlug('pivotPosZ').setDouble( self.userSpecPV[2] )
-		else:
-			depNodeFn.findPlug('pivotPosX').setDouble( c[0] )
-			depNodeFn.findPlug('pivotPosY').setDouble( c[1] )
-			depNodeFn.findPlug('pivotPosZ').setDouble( c[2] )
-			
-		if( self.userSpecN and len( self.userSpecN ) == 3 ):
-			depNodeFn.findPlug('normalVecX').setDouble( self.userSpecN[0] )
-			depNodeFn.findPlug('normalVecY').setDouble( self.userSpecN[1] )
-			depNodeFn.findPlug('normalVecZ').setDouble( self.userSpecN[2] )
-		else:
-			depNodeFn.findPlug('normalVecX').setDouble( n[0] )
-			depNodeFn.findPlug('normalVecY').setDouble( n[1] )
-			depNodeFn.findPlug('normalVecZ').setDouble( n[2] )
-			
-	#-----------------------------------------------
 	def _initModifierNode(self, modifierNode):
 		depNodeFn = MFnDependencyNode(modifierNode)
 		compListAttr = depNodeFn.attribute('inputComponents')
@@ -1591,15 +1561,32 @@ class CircularizeVtx(PolyModifier.polyModifierCmd):
 			return
 
 		points = []
-		c = MVector( 0.0, 0.0, 0.0 )
 		while( not itrVtx.isDone() ):
 			p = itrVtx.position( MSpace.kObject )
-			c = c + MVector( p )
 			points.append( p )
 			itrVtx.next()
 
-		n = getPlaneNormal( points )
-		c /= itrVtx.count()
+		majorAxis, t, n, c = getPcaAxis( points )
+		
+		mat, matInv = createSystemMat( majorAxis, n, t, c )
+		#make bbox center
+		useBBoxCenter = True
+
+		if( useBBoxCenter ):
+			p = points[0] * mat
+			boxmin = MVector( p.x, p.y, p.z )
+			boxmax = MVector( p.x, p.y, p.z )
+			for i in xrange( 1, len( points ) ):
+				p = points[i] * mat
+				boxmin.x = min( boxmin.x, p.x )
+				boxmin.y = min( boxmin.y, p.y )
+				boxmin.z = min( boxmin.z, p.z )
+				boxmax.x = max( boxmax.x, p.x )
+				boxmax.y = max( boxmax.y, p.y )
+				boxmax.z = max( boxmax.z, p.z )
+			c = boxmax + boxmin
+			c = c * 0.5
+			c = MVector( MPoint( c ) * matInv )
 
 		minRad = 100000000.0
 		maxRad = 0.0
@@ -1612,7 +1599,9 @@ class CircularizeVtx(PolyModifier.polyModifierCmd):
 			avgRad += l
 		avgRad /= len( points )
 
-		if( self.initRadMode == 1 ):
+		if( self.initRadius ):
+			depNodeFn.findPlug('radius').setDouble( self.initRadius )
+		elif( self.initRadMode == 1 ):
 			depNodeFn.findPlug('radius').setDouble( minRad )
 		elif( self.initRadMode == 2 ):
 			depNodeFn.findPlug('radius').setDouble( maxRad )
@@ -1623,14 +1612,18 @@ class CircularizeVtx(PolyModifier.polyModifierCmd):
 		depNodeFn.findPlug('initialNY').setDouble( n[1] )
 		depNodeFn.findPlug('initialNZ').setDouble( n[2] )
 			
+		depNodeFn.findPlug('initialPX').setDouble( c[0] )
+		depNodeFn.findPlug('initialPY').setDouble( c[1] )
+		depNodeFn.findPlug('initialPZ').setDouble( c[2] )
+		
 		if( self.userSpecPV and len( self.userSpecPV ) == 3 ):
 			depNodeFn.findPlug('pivotPosX').setDouble( self.userSpecPV[0] )
 			depNodeFn.findPlug('pivotPosY').setDouble( self.userSpecPV[1] )
 			depNodeFn.findPlug('pivotPosZ').setDouble( self.userSpecPV[2] )
 		else:
-			depNodeFn.findPlug('pivotPosX').setDouble( c[0] )
-			depNodeFn.findPlug('pivotPosY').setDouble( c[1] )
-			depNodeFn.findPlug('pivotPosZ').setDouble( c[2] )
+			depNodeFn.findPlug('pivotPosX').setDouble( c.x )
+			depNodeFn.findPlug('pivotPosY').setDouble( c.y )
+			depNodeFn.findPlug('pivotPosZ').setDouble( c.z )
 			
 		if( self.userSpecN and len( self.userSpecN ) == 3 ):
 			depNodeFn.findPlug('normalVecX').setDouble( self.userSpecN[0] )
@@ -1640,6 +1633,16 @@ class CircularizeVtx(PolyModifier.polyModifierCmd):
 			depNodeFn.findPlug('normalVecX').setDouble( n[0] )
 			depNodeFn.findPlug('normalVecY').setDouble( n[1] )
 			depNodeFn.findPlug('normalVecZ').setDouble( n[2] )
+
+		ramp = MRampAttribute( MPlug( modifierNode, CircularizeVtxNode.profileRamp ) )
+		if( ramp.getNumEntries() > 0 ):
+			for i in range( ramp.getNumEntries() ):
+				ramp.setValueAtIndex( 1.0, i )
+		else:
+			defaultPositions = MFloatArray( 2, 1.0 )
+			defaultValues = MFloatArray( 2, 1.0 )
+			defaultInterpolations = MIntArray( 2, 1 )
+			ramp.addEntries( defaultPositions, defaultValues, defaultInterpolations )
 
 	#-----------------------------------------------
 	def _directModifier(self, mesh):
@@ -1680,6 +1683,7 @@ def syntaxCreator():
 	syntax.addFlag( 'p', 'pivot', MSyntax.kDouble, MSyntax.kDouble, MSyntax.kDouble )
 	syntax.addFlag( 'n', 'normal', MSyntax.kDouble, MSyntax.kDouble, MSyntax.kDouble )
 	syntax.addFlag( 'r', 'radius', MSyntax.kDouble )
+	syntax.addFlag( 'rm', 'initialRadiusMode', MSyntax.kDouble )
 	return syntax
 
 #-----------------------------------------------
