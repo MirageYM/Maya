@@ -1,0 +1,4 @@
+global proc DX11CurvVPOptionBox(){
+	python( "import DX11CurvVPUI" );
+	python( "DX11CurvVPUI.show()" );
+}
