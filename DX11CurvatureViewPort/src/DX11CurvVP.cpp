@@ -317,5 +317,10 @@ void C_DX11CurvVP::setShaderParam( const MString& paramName, double val ){
 			reinterpret_cast<CurvatureClass*>( renderOperations_[ kUserOpCurv ] )->commonShaderParameter().gAmbient = val;
 		}
 	}
+	if( paramName == MString( "gDepthLimit" ) ){
+		if( renderOperations_[ kUserOpCurv ] ){
+			reinterpret_cast<CurvatureClass*>( renderOperations_[ kUserOpCurv ] )->commonShaderParameter().gDepthLimit = val;
+		}
+	}
 
 }

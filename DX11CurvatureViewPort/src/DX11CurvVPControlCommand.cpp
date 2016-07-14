@@ -40,6 +40,7 @@ MSyntax C_DX11CurvVPControlCommand::newSyntax()
 	syntax.addFlag( "ca", "checkerAlpha", MSyntax::kDouble );
 	syntax.addFlag( "cr", "checkerRepeat", MSyntax::kDouble );
 	syntax.addFlag( "amb", "ambient", MSyntax::kDouble );
+	syntax.addFlag( "dl", "depthLimit", MSyntax::kDouble );
 
 	syntax.addArg( MSyntax::kString );
 
@@ -84,6 +85,7 @@ MStatus C_DX11CurvVPControlCommand::parseArgsAndSet( const MArgList& args )
 	SetFloatParam( "ca", "gCheckerAlpha" );
 	SetFloatParam( "cr", "gCheckerRepeat" );
 	SetFloatParam( "amb", "gAmbient" );
+	SetFloatParam( "dl", "gDepthLimit" );
 	
 	return MS::kSuccess;
 }

@@ -95,6 +95,7 @@ class Setting( SettingBase ):
 		self.colorNegR = 0.0
 		self.colorNegG = 0.0
 		self.colorNegB = 1.0
+		self.depthLimit = 0.01
 
 	#-----------------------------------------------
 	def getPrefix( self ):
@@ -277,6 +278,11 @@ class SettingGUI( QWidget ):
 		self.valWidget[-1][1][1].valueChanged.connect( self.onApplyClicked )
 		self.valWidget[-1][1][2].valueChanged.connect( self.onApplyClicked )
 		
+		self.valWidget.append( makeFloatSlider( 'Depth Limit', self.setting.depthLimit, 0.0000001, 0.1, 0.001, 6, 0.01 ) )
+		topLayout.addLayout( self.valWidget[-1][0] )
+		self.valWidget[-1][1][1].valueChanged.connect( self.onApplyClicked )
+
+		
 		#btn
 		btnLayout = QHBoxLayout()
 		btn = QPushButton( 'Apply' )
@@ -316,6 +322,7 @@ class SettingGUI( QWidget ):
 		self.setting.colorNegR = self.valWidget[11][1][0].value()
 		self.setting.colorNegG = self.valWidget[11][1][1].value()
 		self.setting.colorNegB = self.valWidget[11][1][2].value()
+		self.setting.depthLimit = self.valWidget[12][1][1].value()
 		
 		self.setting.saveToMaya()
 		maya.cmds.DX11CurvViewPortControl( vm = self.setting.valMult, 
@@ -342,6 +349,7 @@ class SettingGUI( QWidget ):
 										 cnr = self.setting.colorNegR,
 										 cng = self.setting.colorNegG,
 										 cnb = self.setting.colorNegB,
+										 dl = self.setting.depthLimit,
 									  )
 		maya.cmds.refresh( f = True )
 

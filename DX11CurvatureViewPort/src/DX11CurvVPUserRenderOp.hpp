@@ -68,6 +68,7 @@ class C_DX11CurvVPUserRenderOp: public MHWRender::MUserRenderOperation{
 		FLOAT		gCheckerAlpha;
 		FLOAT		gCheckerRepeat;
 		FLOAT		gAmbient;
+		FLOAT		gDepthLimit;
 	};
 
 	enum RenderTargets{

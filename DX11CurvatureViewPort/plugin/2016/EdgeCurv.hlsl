@@ -17,6 +17,7 @@ cbuffer CommonShaderParameter:register( b0 ){
 	float	gCheckerAlpha			:packoffset( c23.y );
 	float	gCheckerRepeat			:packoffset( c23.z );
 	float	gAmbient				:packoffset( c23.w );
+	float	gDepthLimit				:packoffset( c24 );
 };
 
 SamplerState ClampedPointSampler: register( s0 );
@@ -89,22 +90,6 @@ int2 toTexPreSV( float4 pos, float2 offset ){
 }
 
 //--------------------------------------------------------
-//toTexPreSV
-//--------------------------------------------------------
-int2 svToPos( float4 pos, float2 offset ){
-	pos /= pos.w;
-	float2 ndc = 0.5f * float2( pos.x, -pos.y ) + 0.5f;
-	ndc.x *= gViewWidth;
-	ndc.y *= gViewHeight;
-	ndc.x += 0.5f / gViewWidth;
-	ndc.y -= 0.5f / gViewHeight;
-	ndc.x += offset.x;
-	ndc.y += offset.y;
-	int2 ret = floor( ndc );
-	return ret;
-}
-
-//--------------------------------------------------------
 //lookupTex4
 //--------------------------------------------------------
 float4 lookupTex4( float4 pos, Texture2D tex, float2 offset ){
@@ -118,7 +103,7 @@ float4 lookupTex4( float4 pos, Texture2D tex, float2 offset ){
 PSPre_In vsPre( VS_In input ){
 	PSPre_In ret;
 	ret.Pos = mul( float4( input.localPos.xyz, 1.0f ), gWorldViewProjection );
-	ret.Pos.z += 0.01f;
+	ret.Pos.z += gDepthLimit;
 	return ret;
 }
 
@@ -138,20 +123,6 @@ GS0_In vs0( VS_In input ){
 	GS0_In ret;
 	ret.localPos = float4( input.localPos, 1.0f );
 	ret.Pos = mul( float4( input.localPos.xyz, 1.0f ), gWorldViewProjection );
-
-	int2 sc = toTexPreSV( ret.Pos, float2( 0.0f, 0.0f ) );
-	float2 p = float2( (float)sc.x + 0.5f, (float)sc.y + 0.5f );
-	p.x -= 0.5f / gViewWidth;
-	p.y += 0.5f / gViewHeight;
-	p.x /= gViewWidth;
-	p.y /= gViewHeight;
-	p -= 0.5f;
-	p *= 2.0f;
-	p.y = -p.y;
-	p *= ret.Pos.w;
-	ret.Pos.x = p.x;
-	ret.Pos.y = p.y;
-	
 	ret.wvPos = mul( float4( input.localPos.xyz, 1.0f ), gWorldView );
 	ret.wPos = mul( float4( input.localPos.xyz, 1.0f ), gWorld );
 	ret.normal = mul( float4( input.normal.xyz, 0.0f ), gWorld );
@@ -191,6 +162,53 @@ void gs0( triangle GS0_In inputStream[3], inout PointStream< PS0_In > outputStre
 
 }
 
+[maxvertexcount(18)]
+void gs0tri( triangle GS0_In inputStream[3], inout TriangleStream< PS0_In > outputStream ){
+
+	PS0_In output;
+	float area = length( cross( inputStream[1].normal.xyz - inputStream[0].normal.xyz, inputStream[2].normal.xyz - inputStream[0].normal.xyz ) ) * 0.5f;
+
+	for( int i = 0; i < 3; ++i ){
+		output.wvPos = inputStream[i].wvPos;
+		output.localPos = inputStream[i].localPos;
+
+		int2 indices = { ( i + 1 ) % 3, ( i + 2 ) % 3 };
+
+		float k = 0.0f;
+		for( int j = 0; j < 2; ++j ){
+			float3 ev = inputStream[indices[j]].wPos.xyz - inputStream[i].wPos.xyz;
+			float h = dot( inputStream[i].normal.xyz, ev );
+			float3 evPlane = ev - inputStream[i].normal.xyz * h;
+			float t = max( length( evPlane ), 0.0000001f );
+			k -= 1.0f / ( length( ev ) / atan( h / t ) );
+		}
+
+		output.curvature = float4( k, k, 1.0f, 1.0f );
+
+		static const float sz = 1.1f;
+		float scx = sz * inputStream[i].Pos.w / gViewWidth;
+		float scy = sz * inputStream[i].Pos.w / gViewHeight;
+			
+		output.Pos = inputStream[i].Pos + float4( scx, scy, 0.0f, 0.0f );
+		outputStream.Append( output );
+		output.Pos = inputStream[i].Pos + float4( scx, -scy, 0.0f, 0.0f );
+		outputStream.Append( output );
+		output.Pos = inputStream[i].Pos + float4( -scx, -scy, 0.0f, 0.0f );
+		outputStream.Append( output );
+		outputStream.RestartStrip();
+		output.Pos = inputStream[i].Pos + float4( scx, scy, 0.0f, 0.0f );
+		outputStream.Append( output );
+		output.Pos = inputStream[i].Pos + float4( -scx, -scy, 0.0f, 0.0f );
+		outputStream.Append( output );
+		output.Pos = inputStream[i].Pos + float4( -scx, scy, 0.0f, 0.0f );
+		outputStream.Append( output );
+		outputStream.RestartStrip();
+	}
+
+
+
+}
+
 //--------------------------------------------------------
 // ps0
 //--------------------------------------------------------
@@ -213,24 +231,6 @@ PS1_In vs1( VS_In input ){
 	ret.uv = input.uv.xy;
 	
 	ret.curvature = lookupTex4( ret.Pos, gCurvatureTexture, float2( 0.5f, 0.5f ) );
-
-	static int2 c[] = {	int2( -1.0f, -1.0f ),
-						int2( -1.0f, 0.0f ),
-						int2( -1.0f, 1.0f ),
-						int2( 1.0f, -1.0f ),
-						int2( 1.0f, 0.0f ),
-						int2( 1.0f, 1.0f ),
-						int2( 0.0f, -1.0f ),
-						int2( 0.0f, 1.0f ) };
-
-	if( ret.curvature.z < 0.1f ){
-		for( int i = 0; i < 8; ++i ){
-			ret.curvature = lookupTex4( ret.Pos, gCurvatureTexture, c[i] );
-			if( ret.curvature.z > 0.1f ){
-				break;
-			}
-		}
-	}
 	ret.curvature.xy /= ret.curvature.z;
 	return ret;
 }

@@ -58,6 +58,7 @@ C_DX11CurvVPUserRenderOp::C_DX11CurvVPUserRenderOp( const MString& name ):
 	commonShaderParameter_.gCheckerAlpha = 0.9f;
 	commonShaderParameter_.gCheckerRepeat = 10.0f;
 	commonShaderParameter_.gAmbient = 0.5f;
+	commonShaderParameter_.gDepthLimit = 0.001f;
 	
 	try{
 		MHWRender::MRenderer *theRenderer = MHWRender::MRenderer::theRenderer();
@@ -132,7 +133,7 @@ C_DX11CurvVPUserRenderOp::C_DX11CurvVPUserRenderOp( const MString& name ):
 		pass0_->initFromFile(	shaderBasePath,
 								"EdgeCurv.hlsl",
 								"vs0",
-								"gs0",
+								"gs0tri",
 								"ps0",
 								&inputDesc,
 								nullptr,
@@ -758,7 +759,8 @@ void C_DX11CurvVPUserRenderOp::drawObject(	const MDagPath& path,
 
 		//render target
 		ID3D11DepthStencilView* pd = reinterpret_cast< ID3D11DepthStencilView* >( workDepthBuffer_->resourceHandle() );
-
+		pD3DDeviceContext_->ClearDepthStencilView( pd, D3D11_CLEAR_DEPTH, 1.0f, 0.0f );
+		
 		pD3DDeviceContext_->OMSetRenderTargets( 0, nullptr, pd );
 
 		//SO
@@ -783,7 +785,7 @@ void C_DX11CurvVPUserRenderOp::drawObject(	const MDagPath& path,
 		//update
 		
 		//rasterState
-		rsDesc.FillMode = D3D11_FILL_WIREFRAME;
+		rsDesc.FillMode = D3D11_FILL_SOLID;
 		rsDesc.CullMode = D3D11_CULL_NONE;
 		rsDesc.MultisampleEnable = false;
 		rsDesc.AntialiasedLineEnable = false;
@@ -824,6 +826,10 @@ void C_DX11CurvVPUserRenderOp::drawObject(	const MDagPath& path,
 		ID3D11DepthStencilView* pd = reinterpret_cast< ID3D11DepthStencilView* >( workDepthBuffer_->resourceHandle() );
 		
 		ID3D11RenderTargetView* rv[] = { renderTargets_[RTCurvature]->getRenderTarget() };
+		static const float clearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+		ID3D11RenderTargetView* pv = reinterpret_cast< ID3D11RenderTargetView* >( renderTargets_[RTCurvature]->getRenderTarget() );
+		pD3DDeviceContext_->ClearRenderTargetView( pv, clearColor );
+		
 		pD3DDeviceContext_->OMSetRenderTargets( 1, rv, pd );
 
 		//SO
