@@ -39,6 +39,8 @@ C_DX11CurvVP::C_DX11CurvVP( const MString& name ):
 	}
 
 	renderOperations_[kUserOpCurv] = new CurvatureClass( "user" );
+	renderOperations_[kPreSceneOp] = new C_PreSceneRenderOp( "postScene" );
+	renderOperations_[kPostSceneOp] = new C_PostSceneRenderOp( "postScene" );
 	renderOperations_[kPresentOp] = new C_PresentOp( "present" );
 
 	currentOperation_ = -1;
@@ -153,11 +155,14 @@ void C_DX11CurvVP::updateRenderTargets( void ){
 			throw;
 		}
 	}
-	MHWRender::MRenderTarget* output = nullptr;
+	MHWRender::MRenderTarget* outputs[2] = { nullptr, nullptr };
 	if( renderOperationsEnabled_[ kUserOpCurv ] && renderOperations_[ kUserOpCurv ] ){
-		output = reinterpret_cast<CurvatureClass*>( renderOperations_[ kUserOpCurv ] )->getOutputRenderBuffer();
+		outputs[0] = reinterpret_cast<CurvatureClass*>( renderOperations_[ kUserOpCurv ] )->getOutputRenderBuffer();
+		outputs[1] = reinterpret_cast<CurvatureClass*>( renderOperations_[ kUserOpCurv ] )->getOutputDepthBuffer();
 	}
-	reinterpret_cast<C_PresentOp*>( renderOperations_[kPresentOp] )->setRenderTarget( output );
+	reinterpret_cast<C_PreSceneRenderOp*>( renderOperations_[kPreSceneOp] )->setRenderTarget( outputs, 2 );
+	reinterpret_cast<C_PostSceneRenderOp*>( renderOperations_[kPostSceneOp] )->setRenderTarget( outputs, 2 );
+	reinterpret_cast<C_PresentOp*>( renderOperations_[kPresentOp] )->setRenderTarget( outputs[0] );
 }
 
 //- - - - - - - - - - - - - - - - - -
@@ -182,6 +187,8 @@ void C_DX11CurvVP::updatePass( const MString& destination ){
 //
 MStatus C_DX11CurvVP::cleanup( void ){
 	currentOperation_ = -1;
+	reinterpret_cast<C_PreSceneRenderOp*>( renderOperations_[kPreSceneOp] )->setRenderTarget( nullptr );
+	reinterpret_cast<C_PostSceneRenderOp*>( renderOperations_[kPostSceneOp] )->setRenderTarget( nullptr );
 	reinterpret_cast<C_PresentOp*>( renderOperations_[kPresentOp] )->setRenderTarget( nullptr );
 	#if 1
 	//avoid crush when plugin re-initialized.

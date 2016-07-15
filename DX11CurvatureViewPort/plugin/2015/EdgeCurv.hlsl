@@ -255,7 +255,7 @@ PS1_Out ps1( PS1_In input ){
 	result = lerp( result, gColNeg, clamp( -val, 0.0f, 1.0f ) );
 	
 	ret.color = result;
-	ret.color *= max( gAmbient, input.normal.y );
+	ret.color *= max( gAmbient, clamp( input.normal.y, 0.0f, 1.0f ) );
 
 	int xgd = clamp( abs( fmod( input.wPos.x + gGridOffset.x, gGridDist.x ) ) / gGridWidth.x - 1.0f, 0.0f, 1.0f );
 	int ygd = clamp( abs( fmod( input.wPos.y + gGridOffset.y, gGridDist.y ) ) / gGridWidth.y - 1.0f, 0.0f, 1.0f );

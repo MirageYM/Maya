@@ -341,6 +341,13 @@ MHWRender::MRenderTarget* C_DX11CurvVPUserRenderOp::getOutputRenderBuffer(	void 
 
 //- - - - - - - - - - - - - - - - - -
 //
+MHWRender::MRenderTarget* C_DX11CurvVPUserRenderOp::getOutputDepthBuffer(	void ){
+	
+	return outputDepthBuffer_;
+}
+
+//- - - - - - - - - - - - - - - - - -
+//
 void C_DX11CurvVPUserRenderOp::releaseRenderTargets( void ){
 	MHWRender::MRenderer *theRenderer = MHWRender::MRenderer::theRenderer();
 	const MHWRender::MRenderTargetManager* targetManager = theRenderer->getRenderTargetManager();
@@ -405,7 +412,7 @@ void C_DX11CurvVPUserRenderOp::drawSceneObjects( const MHWRender::MDrawContext& 
 
 	static const float clearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
 	ID3D11RenderTargetView* pv = reinterpret_cast< ID3D11RenderTargetView* >( outputRenderBuffer_->resourceHandle() );
-	pD3DDeviceContext_->ClearRenderTargetView( pv, clearColor );
+	//pD3DDeviceContext_->ClearRenderTargetView( pv, clearColor );
 	for( int i = 0; i < static_cast<int>( RTEnd ); ++i ){
 		pD3DDeviceContext_->ClearRenderTargetView( renderTargets_[ i ]->getRenderTarget(), clearColor );
 	}

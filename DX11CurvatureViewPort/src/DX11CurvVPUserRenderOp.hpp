@@ -94,6 +94,7 @@ class C_DX11CurvVPUserRenderOp: public MHWRender::MUserRenderOperation{
 	virtual void								updateRenderTargets		(	void );
 	virtual void								releaseRenderTargets	(	void );
 	virtual MHWRender::MRenderTarget* 			getOutputRenderBuffer	(	void );
+	virtual MHWRender::MRenderTarget* 			getOutputDepthBuffer	(	void );
 
 	virtual void								drawSceneObjects		(	const MHWRender::MDrawContext& context,
 																			ID3D11Device* pD3DDevice,

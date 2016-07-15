@@ -278,7 +278,7 @@ class SettingGUI( QWidget ):
 		self.valWidget[-1][1][1].valueChanged.connect( self.onApplyClicked )
 		self.valWidget[-1][1][2].valueChanged.connect( self.onApplyClicked )
 		
-		self.valWidget.append( makeFloatSlider( 'Depth Limit', self.setting.depthLimit, 0.0000001, 0.1, 0.001, 6, 0.01 ) )
+		self.valWidget.append( makeFloatSlider( 'Depth Limit', self.setting.depthLimit, 0.00001, 0.1, 0.001, 6, 0.01 ) )
 		topLayout.addLayout( self.valWidget[-1][0] )
 		self.valWidget[-1][1][1].valueChanged.connect( self.onApplyClicked )
 

@@ -49,7 +49,9 @@ class C_DX11CurvVP: public MHWRender::MRenderOverride{
 	//Enumerations
 	enum
 	{
-		kUserOpCurv = 0,
+		kPreSceneOp = 0,
+		kUserOpCurv,
+		kPostSceneOp,
 		kPresentOp,
 		kOperationCount
 	};
@@ -94,6 +96,108 @@ class C_DX11CurvVP: public MHWRender::MRenderOverride{
 
 	static C_DX11CurvVP*				instance_;
 	
+};
+
+//--------------------------------------------------------
+//! C_PreSceneRenderOp
+//! 
+//
+//--------------------------------------------------------
+class C_PreSceneRenderOp : public MHWRender::MSceneRender{
+ public:
+	//Creators
+	C_PreSceneRenderOp( const MString &name ): MSceneRender( name ), pTarget_{ nullptr, nullptr }{
+		mClearOperation.setMask( MHWRender::MClearOperation::kClearAll );
+	};
+	virtual ~C_PreSceneRenderOp(){};
+
+ public:
+	//Manipulators
+	void setRenderTarget( MHWRender::MRenderTarget** target, unsigned int count = 0 ){
+		if( target ){
+			if( count >= 1 ){
+				pTarget_[0] = target[0];
+			}
+			if( count >= 2 ){
+				pTarget_[1] = target[1];
+			}
+		}else{
+			pTarget_[0] = nullptr;
+			pTarget_[1] = nullptr;
+		}
+			
+	};
+	
+	//MSceneRender Override
+	virtual PPRenderTarget targetOverrideList( unsigned int &listSize ) override{
+		if( pTarget_[0] && pTarget_[1] ){
+			listSize = 2;
+			return pTarget_;
+		}else{
+			listSize = 0;
+			return nullptr;
+		}
+	};
+
+	virtual MSceneRender::MSceneFilterOption renderFilterOverride( void ) override{
+		return MSceneRender::kRenderPreSceneUIItems;
+	};
+
+	
+ protected:
+	//Members
+	MHWRender::MRenderTarget* pTarget_[2];
+};
+
+//--------------------------------------------------------
+//! C_PostSceneRenderOp
+//! 
+//
+//--------------------------------------------------------
+class C_PostSceneRenderOp : public MHWRender::MSceneRender{
+ public:
+	//Creators
+	C_PostSceneRenderOp( const MString &name ): MSceneRender( name ), pTarget_{ nullptr, nullptr }{
+		mClearOperation.setMask( MHWRender::MClearOperation::kClearNone );
+	};
+	virtual ~C_PostSceneRenderOp(){};
+
+ public:
+	//Manipulators
+	void setRenderTarget( MHWRender::MRenderTarget** target, unsigned int count = 0 ){
+		if( target ){
+			if( count >= 1 ){
+				pTarget_[0] = target[0];
+			}
+			if( count >= 2 ){
+				pTarget_[1] = target[1];
+			}
+		}else{
+			pTarget_[0] = nullptr;
+			pTarget_[1] = nullptr;
+		}
+			
+	};
+	
+	//MSceneRender Override
+	virtual PPRenderTarget targetOverrideList( unsigned int &listSize ) override{
+		if( pTarget_[0] && pTarget_[1] ){
+			listSize = 2;
+			return pTarget_;
+		}else{
+			listSize = 0;
+			return nullptr;
+		}
+	};
+
+	virtual MSceneRender::MSceneFilterOption renderFilterOverride( void ) override{
+		return MSceneRender::kRenderPostSceneUIItems;
+	};
+
+	
+ protected:
+	//Members
+	MHWRender::MRenderTarget* pTarget_[2];
 };
 
 //--------------------------------------------------------
