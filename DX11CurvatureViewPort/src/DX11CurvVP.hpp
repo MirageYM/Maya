@@ -108,6 +108,10 @@ class C_PreSceneRenderOp : public MHWRender::MSceneRender{
 	//Creators
 	C_PreSceneRenderOp( const MString &name ): MSceneRender( name ), pTarget_{ nullptr, nullptr }{
 		mClearOperation.setMask( MHWRender::MClearOperation::kClearAll );
+		MDoubleArray res;
+		MGlobal::executeCommand( "displayRGBColor -q background", res );
+		float c[] = { res[0], res[1], res[2], 1.0f };
+		mClearOperation.setClearColor( c );
 	};
 	virtual ~C_PreSceneRenderOp(){};
 

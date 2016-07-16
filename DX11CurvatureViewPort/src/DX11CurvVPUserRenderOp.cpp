@@ -42,7 +42,8 @@ C_DX11CurvVPUserRenderOp::C_DX11CurvVPUserRenderOp( const MString& name ):
 	pIdx_( nullptr ),
 	pIndexBuffer_( nullptr ),
 	pStreamOutBuffer_( nullptr ),
-	isInit_( false )
+	isInit_( false ),
+	enableAA_( false )
 
 {
 
@@ -245,6 +246,18 @@ void C_DX11CurvVPUserRenderOp::initRenderTargets(	void ){
 	MHWRender::MRenderer *theRenderer = MHWRender::MRenderer::theRenderer();
 	theRenderer->outputTargetSize( width_, height_ );
 	pD3DDevice_ = (ID3D11Device *)theRenderer->GPUDeviceHandle();
+
+	int multiSampleCount = 0;
+	#if MAYA_VERSION >= 20160
+	{
+		int tmp;
+		MGlobal::executeCommand( "getAttr hardwareRenderingGlobals.multiSampleEnable", tmp );
+		enableAA_ = tmp ? true : false;
+		if( enableAA_ ){
+			MGlobal::executeCommand( "getAttr hardwareRenderingGlobals.multiSampleCount", multiSampleCount );
+		}
+	}
+	#endif
 	
 	if( !outputRenderBuffer_ ){
 		const MHWRender::MRenderTargetManager* targetManager = theRenderer->getRenderTargetManager();
@@ -252,6 +265,7 @@ void C_DX11CurvVPUserRenderOp::initRenderTargets(	void ){
 		outputRenderBufferDesc_.setHeight( height_ );
 		outputRenderBufferDesc_.setName( MString( "useroutput" ) );
 		outputRenderBufferDesc_.setRasterFormat( MHWRender::kR32G32B32A32_FLOAT );
+		outputRenderBufferDesc_.setMultiSampleCount( multiSampleCount );
 		outputRenderBuffer_ = targetManager->acquireRenderTarget( outputRenderBufferDesc_ );
 	}
 
@@ -265,6 +279,7 @@ void C_DX11CurvVPUserRenderOp::initRenderTargets(	void ){
 		outputDepthBufferDesc_.setHeight( height_ );
 		outputDepthBufferDesc_.setName( MString( "userdepth" ) );
 		outputDepthBufferDesc_.setRasterFormat( MHWRender::kD24S8 );
+		outputDepthBufferDesc_.setMultiSampleCount( multiSampleCount );
 		outputDepthBuffer_ = targetManager->acquireRenderTarget( outputDepthBufferDesc_ );
 	}
 
@@ -278,6 +293,7 @@ void C_DX11CurvVPUserRenderOp::initRenderTargets(	void ){
 		outputDepthBufferDesc_.setHeight( height_ );
 		outputDepthBufferDesc_.setName( MString( "workdepth" ) );
 		outputDepthBufferDesc_.setRasterFormat( MHWRender::kD24S8 );
+		outputDepthBufferDesc_.setMultiSampleCount( 0 );
 		workDepthBuffer_ = targetManager->acquireRenderTarget( outputDepthBufferDesc_ );
 	}
 
@@ -384,7 +400,6 @@ void C_DX11CurvVPUserRenderOp::drawSceneObjects( const MHWRender::MDrawContext& 
 	}
 	
 	MStatus status;
-	
 	//matrix
 	MMatrix view = context.getMatrix(MHWRender::MFrameContext::kWorldViewMtx );
 	MMatrix projection = context.getMatrix(MHWRender::MFrameContext::kProjectionMtx );
@@ -431,7 +446,7 @@ void C_DX11CurvVPUserRenderOp::drawSceneObjects( const MHWRender::MDrawContext& 
 			continue;
 		}
 
-		if( !path.hasFn( MFn::kMesh ) ){
+		if( !( path.hasFn( MFn::kMesh ) || path.hasFn( MFn::kNurbsSurface ) ) ){
 			continue;
 		}
 
@@ -489,14 +504,19 @@ void C_DX11CurvVPUserRenderOp::drawObject(	const MDagPath& path,
 	//get Vertex and Index buffer
 	MHWRender::MGeometryRequirements geomRequirements;
 
-	MFnMesh fnMesh( path );
-
 	MHWRender::MVertexBufferDescriptor posDesc("", MHWRender::MGeometry::kPosition, MHWRender::MGeometry::kFloat, 3);
 	geomRequirements.addVertexRequirement(posDesc);
 	MHWRender::MVertexBufferDescriptor nmlDesc("", MHWRender::MGeometry::kNormal, MHWRender::MGeometry::kFloat, 3);
 	geomRequirements.addVertexRequirement(nmlDesc);
-	MHWRender::MVertexBufferDescriptor uvDesc( fnMesh.currentUVSetName().asChar(), MHWRender::MGeometry::kTexture, MHWRender::MGeometry::kFloat, 2);
-	geomRequirements.addVertexRequirement(uvDesc);
+
+	MHWRender::MVertexBufferDescriptor uvDesc;
+	if( path.hasFn( MFn::kMesh ) ){
+		MFnMesh fnMesh( path );
+		uvDesc = MHWRender::MVertexBufferDescriptor( fnMesh.currentUVSetName().asChar(), MHWRender::MGeometry::kTexture, MHWRender::MGeometry::kFloat, 2);
+		geomRequirements.addVertexRequirement(uvDesc);
+	}else{
+		uvDesc = MHWRender::MVertexBufferDescriptor( "", MHWRender::MGeometry::kTexture, MHWRender::MGeometry::kFloat, 2);
+	}
 
 	size_t srcVertexElementWidth = 8;
 
@@ -862,7 +882,7 @@ void C_DX11CurvVPUserRenderOp::drawObject(	const MDagPath& path,
 		//rasterState
 		rsDesc.FillMode = D3D11_FILL_SOLID;
 		rsDesc.CullMode = D3D11_CULL_NONE;
-		rsDesc.MultisampleEnable = true;
+		rsDesc.MultisampleEnable = enableAA_;
 		rsDesc.AntialiasedLineEnable = false;
 		rsDesc.DepthBias = 0;
 		rsDesc.DepthBiasClamp = 0.0f;

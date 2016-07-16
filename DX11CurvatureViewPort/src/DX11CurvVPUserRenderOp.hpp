@@ -156,6 +156,8 @@ class C_DX11CurvVPUserRenderOp: public MHWRender::MUserRenderOperation{
 	//MayaVP
 	MString										panelName_;
 	MHWRender::MCameraOverride					cameraOverride_;
+	bool										enableAA_;
+	
 
 };
 
