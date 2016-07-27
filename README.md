@@ -7,7 +7,7 @@ DirectX11を使用してオブジェクトの曲率をリアルタイムで表�
 -----
 # CircularizeVtx
 選択した頂点を円形に配置するプラグインです。
-![](https://raw.githubusercontent.com/MirageYM/Maya/master/CircularizeVtx_1.jp)
+![](https://raw.githubusercontent.com/MirageYM/Maya/master/CircularizeVtx_1.jpg)
 
 詳しくはこちら
 https://github.com/MirageYM/Maya/wiki/CircularizeVtx
