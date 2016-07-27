@@ -1,5 +1,18 @@
 # Maya Tools
 -----
+# DX11CurvatureViewPort
+DirectX11を使用してオブジェクトの曲率をリアルタイムで表示するビューポートレンダープラグインです。
+![](https://raw.githubusercontent.com/MirageYM/Maya/master/DX11CurvatureViewPort.jpg)
+
+-----
+# CircularizeVtx
+選択した頂点を円形に配置するプラグインです。
+![](https://raw.githubusercontent.com/MirageYM/Maya/master/CircularizeVtx_1.jp)
+
+詳しくはこちら
+https://github.com/MirageYM/Maya/wiki/CircularizeVtx
+
+-----
 # AlignPlaneManip
 選択した頂点やフェイスを平面上に投影するプラグインです。
 マニピュレーターを介して操作することが出来ます。
