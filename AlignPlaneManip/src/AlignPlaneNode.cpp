@@ -35,7 +35,7 @@ using namespace MayaUtility;
 //--------------------------------------------------------
 //! AlignPlaneNode
 //--------------------------------------------------------
-MTypeId AlignPlaneNode::id_( 0xb5b222 );
+MTypeId AlignPlaneNode::id_( 0x00126ec5 );
 
 
 MObject	AlignPlaneNode::inMesh_;

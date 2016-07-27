@@ -26,7 +26,7 @@ using namespace MayaUtility;
 //--------------------------------------------------------
 //! SpreadNormalNodeManip
 //--------------------------------------------------------
-MTypeId SpreadNormalNodeManip::id_( 0xb5b233 );
+MTypeId SpreadNormalNodeManip::id_( 0x00126ec3 );
 
 //- - - - - - - - - - - - - - - - - -
 //

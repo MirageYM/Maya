@@ -26,7 +26,7 @@ using namespace MayaUtility;
 //--------------------------------------------------------
 //! AlignPlaneNodeManip
 //--------------------------------------------------------
-MTypeId AlignPlaneNodeManip::id_( 0xb5b223 );
+MTypeId AlignPlaneNodeManip::id_( 0x00126ec4 );
 
 //- - - - - - - - - - - - - - - - - -
 //

@@ -37,7 +37,7 @@ using namespace MayaUtility;
 //--------------------------------------------------------
 //! SpreadNormalNode
 //--------------------------------------------------------
-MTypeId SpreadNormalNode::id_( 0xb5b232 );
+MTypeId SpreadNormalNode::id_( 0x00126ec2 );
 
 
 MObject	SpreadNormalNode::inMesh_;

@@ -12,10 +12,18 @@ import maya.cmds
 import maya.mel
 import maya.OpenMayaUI as OpenMayaUI
 
-from PySide.QtCore import *
-from PySide.QtGui import *
-from PySide.QtUiTools import *
-import shiboken
+if( maya.cmds.about( api = True ) >= 201700 ):
+	from PySide2.QtWidgets import *
+	from PySide2.QtCore import *
+	from PySide2.QtGui import *
+	from PySide2.QtUiTools import *
+	import shiboken2 as shiboken
+
+else:
+	from PySide.QtCore import *
+	from PySide.QtGui import *
+	from PySide.QtUiTools import *
+	import shiboken
 
 
 #-----------------------------------------------
