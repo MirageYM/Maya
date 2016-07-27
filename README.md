@@ -1,4 +1,8 @@
 # Maya Tools
+
+最新リリースはこちら
+https://github.com/MirageYM/Maya/releases
+
 -----
 # DX11CurvatureViewPort
 DirectX11を使用してオブジェクトの曲率をリアルタイムで表示するビューポートレンダープラグインです。
