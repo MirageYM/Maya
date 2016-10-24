@@ -157,7 +157,7 @@ namespace DX11ViewPort{
 		DWORD dwShaderFlags = D3DCOMPILE_ENABLE_STRICTNESS;
 
 		ID3DBlob* pErrorBlob = nullptr;
-		hr = D3DX11CompileFromFile( szFileName, nullptr, nullptr, szEntryPoint, szShaderModel,
+		hr = D3DX11CompileFromFileA( szFileName, nullptr, nullptr, szEntryPoint, szShaderModel,
 									dwShaderFlags, 0, nullptr, ppBlobOut, &pErrorBlob, nullptr );
 		if( FAILED(hr) ){
 			if( pErrorBlob ){

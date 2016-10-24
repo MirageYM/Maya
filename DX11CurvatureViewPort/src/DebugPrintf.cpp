@@ -14,5 +14,5 @@ void DebugPrintf( const char* str, ... ){
 	va_start( argp, str );
 	vsprintf_s( buf, MAX_CHAR_LENGTH, str, argp);
 	va_end( argp );
-	OutputDebugString( buf );
+	OutputDebugStringA( buf );
 }

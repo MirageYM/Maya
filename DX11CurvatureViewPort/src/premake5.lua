@@ -39,7 +39,7 @@ mayaLib = {
 
 --dxsdk lib
 dxsdkLib = {
-	'd3dx11d.lib'
+	'd3dx11.lib'
 }
 
 

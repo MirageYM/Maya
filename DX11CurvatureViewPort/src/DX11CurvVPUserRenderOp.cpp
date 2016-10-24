@@ -523,8 +523,12 @@ void C_DX11CurvVPUserRenderOp::drawObject(	const MDagPath& path,
 	MHWRender::MIndexBufferDescriptor triDesc( MHWRender::MIndexBufferDescriptor::kTriangle, MString(),	MHWRender::MGeometry::kTriangles, 3 );
 	geomRequirements.addIndexingRequirement( triDesc );
 	
+#if MAYA_API_VERSION > 201500
 	MHWRender::MGeometryExtractor extractor( geomRequirements, path, MHWRender::kPolyGeom_Normal, &status );
+#else
+	MHWRender::MGeometryExtractor extractor( geomRequirements, path, false, &status );
 
+#endif
 	int triCnt =  extractor.primitiveCount( triDesc );
 	int vtxCnt = extractor.vertexCount();
 	if( triCnt <= 0 || vtxCnt <= 0 ){
