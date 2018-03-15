@@ -14,7 +14,7 @@ namespace MayaUtility{
 		va_start( argp, str );
 		vsprintf_s( buf, 2048, str, argp);
 		va_end( argp );
-		OutputDebugString( buf );
+		OutputDebugStringA( buf );
 	}
 
 }
