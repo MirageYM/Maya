@@ -114,13 +114,6 @@ class Setting( SettingBase ):
 #-----------------------------------------------
 class SettingGUI( QWidget ):
 	instance = None
-
-	#-----------------------------------------------
-	def __new__( cls, *argc, **argv ):
-		if( SettingGUI.instance != None ):
-			return None
-		SettingGUI.instance = QWidget.__new__( cls )
-		return SettingGUI.instance
 	
 	#-----------------------------------------------
 	def __init__( self, p = None ):
@@ -139,12 +132,17 @@ class SettingGUI( QWidget ):
 		self.buildLayout()
 		
 		self.setWindowTitle( 'DX11CurvVP Setting' )
-		
 
 	#-----------------------------------------------
 	def __del__( self ):
 		SettingGUI.instance = None
-		
+
+	@staticmethod
+	def getInstance():
+		if( SettingGUI.instance is None ):
+			SettingGUI.instance = SettingGUI()
+		return SettingGUI.instance
+
 	#-----------------------------------------------
 	def buildLayout( self ):
 
@@ -370,6 +368,5 @@ class SettingGUI( QWidget ):
 		SettingGUI.instance = None
 
 def show():
-	settingUI = SettingGUI( )
-	if( settingUI is not None ):
-		settingUI.show()
+	settingUI = SettingGUI.getInstance()
+	settingUI.show()
