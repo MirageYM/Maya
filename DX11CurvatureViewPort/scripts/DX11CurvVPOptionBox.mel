@@ -1,4 +1,8 @@
 global proc DX11CurvVPOptionBox(){
-	python( "import DX11CurvVPUI" );
+	if( `getApplicationVersionAsFloat` >= 2022.0 ){
+		python( "import DX11CurvVPUI;import importlib;importlib.reload(DX11CurvVPUI)" );
+	}else{
+		python( "import DX11CurvVPUI;reload(DX11CurvVPUI)" );
+	}
 	python( "DX11CurvVPUI.show()" );
 }

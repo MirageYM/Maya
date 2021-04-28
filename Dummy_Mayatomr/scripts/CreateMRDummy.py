@@ -162,7 +162,7 @@ def doIt( basePath ):
 		fhdl.write('import maya.OpenMaya as OpenMaya\n')
 		fhdl.write('import sys\n')
 		for shaderName, dummyClassName in createShaders:
-			fhdl.write('from %s import *\n' % dummyClassName )
+			fhdl.write('from MiaDummy.%s import *\n' % dummyClassName )
 
 		fhdl.write('def registerAll(mplugin):\n')
 		for shaderName, dummyClassName in createShaders:

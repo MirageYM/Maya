@@ -16,6 +16,8 @@
 #include <memory>
 #include <list>
 #include <map>
+#include <string>
+#include <stdexcept>
 
 // Includes for DX
 #include <d3d11.h>

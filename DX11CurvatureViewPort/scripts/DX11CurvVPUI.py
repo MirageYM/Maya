@@ -3,10 +3,13 @@
 import json
 import sys
 import os
-import thread
-import threading
 import time
-import mutex
+if (sys.version_info.major == 3):
+	import _thread
+else:
+	import thread
+	import threading
+	import mutex
 
 import maya.cmds
 import maya.mel

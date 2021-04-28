@@ -34,6 +34,9 @@ import sys
 import math
 import collections
 
+if (sys.version_info.major == 3):
+	xrange = range
+
 import maya.OpenMaya as OpenMaya
 from maya.OpenMaya import *
 import maya.OpenMayaMPx as OpenMayaMPx
@@ -41,7 +44,6 @@ import maya.OpenMayaUI as OpenMayaUI
 import maya.cmds
 
 import CircularizeVtxPM as PolyModifier
-reload( PolyModifier )
 
 kCircularizeVtxCmdName = 'CircularizeVtxCmd'
 kCircularizeVtxNodeName = 'CircularizeVtxNode'
@@ -68,16 +70,16 @@ def MIntArrayToSet( intArray ):
 #-----------------------------------------------
 def DebugPrintMat( mat, prefixStr = '', suffixStr = '' ):
 
-	print prefixStr
+	print( prefixStr )
 	for i in xrange( 4 ):
 		m = []
 		for j in xrange( 4 ):
 			m.append( mat( i, j ) )
-		print m
-	print suffixStr
+		print( m )
+	print( suffixStr )
 #-----------------------------------------------
 def DebugPrintVec( vec, prefixStr = '', suffixStr = '' ):
-	print '%s %f %f %f %s' % ( prefixStr, vec.x, vec.y, vec.z, suffixStr )
+	print( '%s %f %f %f %s' % ( prefixStr, vec.x, vec.y, vec.z, suffixStr ) )
 
 #-----------------------------------------------
 def createSystemMat( v0, n0, t, pv ):
@@ -703,7 +705,7 @@ class CircularizeVtxFactory(PolyModifier.polyModifierFty):
 				loopIds.append( c[0] )
 			elif( c0In and c1In ):
 				break
-			elif( connList > 1 ):
+			elif( len(connList) > 1 ):
 				if( loopIds[-2] == c[0] ):
 					loopIds.append( c[1] )
 				elif( loopIds[-2] == c[1] ):
